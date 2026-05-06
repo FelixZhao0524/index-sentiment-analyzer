@@ -1,59 +1,64 @@
 # index-sentiment-analyzer
 
-A股沪深300 ETF 情绪指数深度分析 Skill for OpenClaw。
+OpenClaw Skill for deep analysis of A-share CSI 300 ETF Sentiment Index indicators.
 
-## 功能
+## Features
 
-- 14个核心情绪因子实时解读（MFI、OBV、MACD、RSI、杠杆资金、期权PCR 等）
-- 6大类情绪分组分析（基础动能/趋势强度/活跃度/短期势能/资金流向/广度一致性）
-- 综合情绪指数档位判断（0-100 分位）
-- 预警信号判断（历史胜率 85.71%，回撤捕捉率 100%）
-- 边际变化斜率分析（5日/20日方向）
-- 10类情绪场景矩阵解读
+- 14 core sentiment factors real-time interpretation (MFI, OBV, MACD, RSI, leverage funds, options PCR, etc.)
+- 6 major factor group analysis (Basic Momentum / Trend Strength / Market Activity / Short-term Momentum / Fund Flow / Breadth Consistency)
+- Composite sentiment index level判断 (0-100 percentile)
+- Warning signal detection (historical win rate 85.71%, drawdown capture rate 100%)
+- Marginal change slope analysis (5-day / 20-day direction)
+- 10-class sentiment scenario matrix interpretation
 
-## 内置数据
+## Built-in Data
 
-- 沪深300ETF 情绪指数历史数据
-- 时间区间：2016-01-04 至 2026-04-30（约2500个交易日）
-- 14个因子 + 综合情绪指数
+- CSI 300 ETF Sentiment Index historical data
+- Time range: 2016-01-04 to 2026-04-30 (~2500 trading days)
+- 14 factors + composite sentiment index
 
-## 安装
+## Installation
 
-在目标 Agent 上执行：
-```bash
-openclaw skill install index-sentiment-analyzer.skill
-```
-
-或通过 URL 直接安装（需先创建 Release）：
+On any OpenClaw agent:
 ```bash
 openclaw skill install https://github.com/FelixZhao0524/index-sentiment-analyzer/releases/download/v1.0/index-sentiment-analyzer.skill
 ```
 
-## 因子列表（14个）
+## 14 Factors
 
-| 因子 | 中文名 | 大类 |
-|---|---|---|
-| obv_factor | 能量潮因子 | 资金流向 |
-| mfi_factor | 资金流量因子 | 市场基础动能 |
-| leverage_factor | 融资杠杆因子 | 市场基础动能 |
-| pcr_factor | 期权多空因子 | 市场基础动能 |
-| turnover_amount_factor | 流动活性因子 | 市场活跃度 |
-| ar_factor | 人气活跃因子 | 市场基础动能 |
-| br_factor | 多空买卖意愿因子 | 市场基础动能 |
-| emascore_long_factor | 均线突破因子 | 市场趋势强度 |
-| signal_macd_factor | 趋势背离因子 | 市场趋势强度 |
-| highlow_factor | 上涨势能因子 | 短期势能 |
-| RSI_factor | 相对强弱因子 | 市场基础动能 |
-| daily_return_factor | 日收益率因子 | 市场基础动能 |
-| up_number_rate_factor | 市场广度因子 | 广度一致性 |
-| equity_bond_effective_factor | 广义拥挤度因子 | 市场基础动能 |
+| Factor | Name | Group |
+|--------|------|-------|
+| obv_factor | On-Balance Volume | Fund Flow |
+| mfi_factor | Money Flow Index | Basic Momentum |
+| leverage_factor | Leverage Factor | Basic Momentum |
+| pcr_factor | Options Put/Call Ratio | Basic Momentum |
+| turnover_amount_factor | Turnover Activity | Market Activity |
+| ar_factor | Activity Ratio | Basic Momentum |
+| br_factor | Buy/Sell Ratio | Basic Momentum |
+| emascore_long_factor | EMA Score Long | Trend Strength |
+| signal_macd_factor | MACD Signal | Trend Strength |
+| highlow_factor | High-Low Momentum | Short-term Momentum |
+| RSI_factor | Relative Strength Index | Basic Momentum |
+| daily_return_factor | Daily Return | Basic Momentum |
+| up_number_rate_factor | Upward Breadth | Breadth Consistency |
+| equity_bond_effective_factor | Equity-Bond Effectiveness | Basic Momentum |
 
-## 预警规则
+## Composite Index Calculation
 
-- **触发条件**：`sentiment_index_avg60_plus == 100` 且次日环比下降
-- **历史胜率**：85.71%（7次预警中6次回撤超10%）
-- **平均提前预警**：约19天
+```
+Composite = (Basic Momentum + Trend Strength + Market Activity + Short-term Momentum + Fund Flow + Breadth Consistency) / 6
+Composite_60d_ma → rolling(60)
+sentiment_index_avg60_plus = percentile(180d, Composite_60d_ma)
+```
 
-## 免责
+Value range: 0-100 (percentile vs. last 180 trading days)
 
-本工具仅供辅助参考，不构成投资建议。
+## Warning Signal
+
+- **Trigger**: `sentiment_index_avg60_plus == 100` AND next day环比下降 (turning point)
+- **Historical win rate**: 85.71% (6 out of 7 warnings were followed by >10% drawdown)
+- **Avg lead time**: ~19 trading days
+
+## Disclaimer
+
+For educational and research purposes only. Not investment advice.
