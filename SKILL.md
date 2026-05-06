@@ -8,26 +8,50 @@ description: |
 
 ## 数据文件
 
-- 文件：`assets/df_sentiment.xlsx`
+- 实时数据：`assets/sentiment_cache.json`（预计算缓存，毫秒级加载，**每次分析优先读此文件**）
+- 原始明细：`assets/df_sentiment.xlsx`（仅查询多日历史走势时才用）
+- 预计算脚本：`scripts/precompute.py`（Excel更新后运行可刷新缓存）
 - 时间范围：2016-01-04 至 2026-04-30（约2500个交易日）
-- 工作表：Sheet1
+
+> **性能说明**：从 JSON 缓存读取仅需 <1ms，无需解析 Excel。Excel 仅在查历史走势（Type E）时使用。
+> 
+> **缓存更新**：Excel 数据更新（如新加一行）后，运行 `python3 scripts/precompute.py` 刷新缓存。
 
 ---
 
 ## 工作流程
 
-### 步骤1：加载Excel数据
+### 步骤1：加载预计算缓存（秒级）
 
 ```python
-import openpyxl
-wb = openpyxl.load_workbook('assets/df_sentiment.xlsx', data_only=True)
-ws = wb['Sheet1']
-data = list(ws.iter_rows(values_only=True))
-headers = data[0]
-rows = data[1:]        # 数据行（按日期升序排列）
-latest = rows[-1]      # 最新交易日
-prev = rows[-2]        # 前一交易日（用于判断拐点）
-wb.close()
+import json
+
+with open('assets/sentiment_cache.json', 'r') as f:
+    cache = json.load(f)
+
+cur = dict(zip(cache['headers'], cache['latest_row']))
+pre = dict(zip(cache['headers'], cache['prev_row']))
+
+# 预计算好的指标（直接使用，无需再算）
+sentiment_now = cache['sentiment_now']
+sentiment_prev = cache['sentiment_prev']
+slope_5 = cache['slope_5']
+group_means = cache['group_means']        # 6大组均值
+hot_factor = cache['hot_factor']           # 最热因子名
+hot_factor_value = cache['hot_factor_value']
+cold_factor = cache['cold_factor']       # 最冷因子名
+cold_factor_value = cache['cold_factor_value']
+all_factors = cache['all_factors']        # 全部14因子当前值
+latest_date = cur['Times']
+```
+
+### 步骤1b：历史走势查询（慢，仅Type E时使用）
+
+```python
+import pandas as pd
+df = pd.read_excel('assets/df_sentiment.xlsx', engine='openpyxl')
+df = df.sort_values('Times').tail(30)  # 最近30条
+# 或 tail(N) 查询更多
 ```
 
 ### 步骤2：识别问题类型
@@ -40,39 +64,26 @@ wb.close()
 | D — 因子分化分析 | "哪类因子最过热？" / "因子之间有没有分化？" |
 | E — 历史走势查询 | "最近一个月情绪指数怎么走的？" |
 
-### 步骤3：计算关键指标
+### 步骤3：直接使用预计算结果
 
 ```python
-def row_to_dict(row):
-    return dict(zip(headers, row))
-
-cur = row_to_dict(latest)
-pre = row_to_dict(prev)
-
-sentiment_col = headers.index('sentiment_index_avg60_plus')
-
-# 综合情绪指数
-sentiment_now = cur['sentiment_index_avg60_plus']
-sentiment_prev = pre['sentiment_index_avg60_plus']
-
-# 拐点判断
+# 拐点判断（来自缓存）
 is_100 = (sentiment_now == 100)
 is_crossdown = (sentiment_now < sentiment_prev)
 
-# 5日斜率
-vals_all = [r[sentiment_col] for r in rows]
-slope_5 = (vals_all[-1] - vals_all[-6]) / 5
+# 5日斜率（已预计算）
+slope_5  # 直接用 cache['slope_5']
 
-# 6大类因子分组
-groups = {
-    '市场基础动能': ['mfi_factor','leverage_factor','pcr_factor','ar_factor',
-                   'br_factor','RSI_factor','daily_return_factor','equity_bond_effective_factor'],
-    '市场趋势强度': ['emascore_long_factor','signal_macd_factor'],
-    '市场活跃度': ['turnover_amount_factor'],
-    '短期势能': ['highlow_factor'],
-    '资金流向': ['obv_factor'],
-    '广度一致性': ['up_number_rate_factor'],
-}
+# 6大类因子分组（已预计算）
+group_means = cache['group_means']
+# {
+#   '市场基础动能': 39.0,
+#   '市场趋势强度': 15.5,
+#   '市场活跃度': 40.5,
+#   '短期势能': 46.0,
+#   '资金流向': 29.0,
+#   '广度一致性': 57.0,
+# }
 ```
 
 ---
@@ -87,7 +98,7 @@ groups = {
 
 ```
 【沪深300ETF情绪指数概览】
-📅 数据日期：{latest['Times']}（有数据的最新交易日）
+📅 数据日期：{cur['Times']}（有数据的最新交易日）
 
 ━━━━━━━━━━━━━━━━━━
 📊 综合情绪指数
