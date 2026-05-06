@@ -1,540 +1,540 @@
-# Factor Definition Reference
+# 因子定义详解
 
-This document defines the meaning, calculation logic, threshold interpretation, and overheating/oversold signal criteria for all 14 core factors in the sentiment index system.
+本文档定义情绪指数体系中 14 个核心因子的含义、计算逻辑、阈值解读与过热/过冷信号判断依据。
 
 ---
 
-## Framework Overview
+## 框架总览
 
-The composite sentiment index is constructed by equal-weighting 6 major factor groups, then applying a 180-day percentile rank normalization, outputting a 0-100 composite index called `sentiment_index_avg60_plus`.
+情绪指数由 6 大类情绪因子等权融合后，再做 180 日百分位化处理，最终输出 0-100 的综合情绪指数 `sentiment_index_avg60_plus`。
 
-6 Major Factor Groups:
+6 大类情绪分组：
 
-| Group | Factors | Interpretation |
+| 大类 | 包含因子 | 解释 |
 |---|---|---|
-| Basic Momentum | mfi / leverage / pcr / ar / br / RSI / daily_return / equity_bond_effective | Comprehensive assessment of current sentiment position and directional tone via price-volume, leverage, and derivatives |
-| Trend Strength | emascore_long / signal_macd | Candle patterns and trend indicators to assess trend stability and short-term strength |
-| Market Activity | turnover_amount | Total market trading volume and turnover rate; activity is the foundation of sustained sentiment |
-| Short-term Momentum | highlow | Short-term index special patterns; monitors sentiment explosive force |
-| Fund Flow | obv | OBV anomalies linked to major player behavior |
-| Breadth Consistency | up_number_rate | Market-wide up/down stock ratio; confirms sentiment breadth |
+| 市场基础动能 | mfi / leverage / pcr / ar / br / RSI / daily_return / equity_bond_effective | 量价、融资、衍生品综合评估市场当前情绪位置与方向基调 |
+| 市场趋势强度 | emascore_long / signal_macd | K线形态与趋势指标，判断趋势稳定性与短期强弱 |
+| 市场活跃度 | turnover_amount | 全市场成交额与换手率，活跃度是情绪持续的基础 |
+| 短期势能 | highlow | 指数短期特殊形态，监控情绪爆发力 |
+| 资金流向 | obv | OBV 异常波动与主力行为相关 |
+| 广度一致性 | up_number_rate | 全市场个股涨跌比例，确认情绪广度 |
 
 ---
 
-## Factor Details
+## 各因子详解
 
 ---
 
-### 1. obv_factor (On-Balance Volume Factor)
+### 1. obv_factor（能量潮因子）
 
-**Group:** Fund Flow
+**大类：** 资金流向
 
-**Source Indicator:** OBV (On-Balance Volume)
+**原始指标：** OBV（On-Balance Volume）
 
-**Calculation:**
+**计算逻辑：**
 ```
-OBV_t = OBV_{t-1} + (Close_t - Close_{t-1}) * Volume_t
-(close up = positive accumulation, down = negative accumulation)
-obv_change = OBV_t - OBV_{t-90} (90-day change)
-obv_factor = 180-day percentile rank of obv_change
+当日 OBV = OBV_{t-1} + (收盘价_t - 收盘价_{t-1}) × 成交量_t
+（收盘价上涨为正值累加，下跌为负值累加）
+obv_change = OBV_t - OBV_{t-90}（90日变化量）
+obv_factor = 180日百分位化(obv_change)
 ```
 
-**Core Meaning:** OBV reflects the dynamic balance of bullish/bearish energy. An OBV breakout above prior highs means major players are continuously accumulating, reinforcing price; an OBV breakdown below prior lows means bearish momentum dominates and sentiment turns cautious. The 90-day change captures medium-term money flow direction.
+**核心含义：** OBV 反映市场多空能量的动态平衡。OBV 突破前高意味着主力资金持续介入，推动价格强化；OBV 跌破前低则表明空头动能主导，情绪转向谨慎。OBV 的 90 日变化量用于捕捉中期资金流向趋势。
 
-**Overheating Signal (obv_factor > 80):**
-- Money continuously flowing in, abundant upward momentum
-- Major players pushing prices higher, market sentiment euphoric
-- **Risk:** Upward momentum may be exhausting; chasing risk is high
+**过热信号（obv_factor > 80）：**
+- 资金持续流入累积，上涨动能充沛
+- 主力资金持续推高，市场情绪亢奋
+- **风险：** 上涨动量可能接近尾声，追涨风险大
 
-**Oversold Signal (obv_factor < 20):**
-- Money continuously flowing out, major players retreating
-- Market sentiment at ice point, bears in control
-- **Opportunity:** Panic selling fully released; rebound may be forming
+**过冷信号（obv_factor < 20）：**
+- 资金持续净流出，主力撤退
+- 市场情绪降至冰点，空头主导
+- **机会：** 恐慌抛压充分释放，可能孕育反弹
 
-**Marginal Change Interpretation:**
-- obv_factor slope turns from negative to positive → Money re-entering, bullish signal
-- obv_factor slope turns from positive to negative → Money accelerating exit, bearish signal
-- obv_factor high-level plateau then first decline → Warning signal (major players may have already distributed)
+**边际变化解读：**
+- obv_factor 斜率由负转正 → 资金重新入场信号，看多
+- obv_factor 斜率由正转负 → 资金加速撤离信号，看空
+- obv_factor 高位钝化后首次下降 → 预警信号（主力可能已出货）
 
 ---
 
-### 2. mfi_factor (Money Flow Index Factor)
+### 2. mfi_factor（资金流量因子）
 
-**Group:** Basic Momentum
+**大类：** 市场基础动能
 
-**Source Indicator:** MFI (Money Flow Index)
+**原始指标：** MFI（Money Flow Index）
 
-**Calculation:**
+**计算逻辑：**
 ```
-Typical Price Typ = (High + Low + Close) / 3
-Money Flow MF = Typ * Volume
-PMF = Sum of positive money flow rolling(30 days) (days when Typ rises)
-NMF = Sum of negative money flow rolling(30 days) (days when Typ falls)
+典型价格 Typ = (最高价 + 最低价 + 收盘价) / 3
+资金流量 MF = Typ × 成交量
+PMF = 正向资金流量 rolling(30日)之和（Typ上升日）
+NMF = 负向资金流量 rolling(30日)之和（Typ下降日）
 MFI = 100 - 100 / (PMF/NMF + 1)
-mfi_factor = 180-day percentile rank of MFI
+mfi_factor = 180日百分位化(MFI)
 ```
 
-**Core Meaning:** MFI combines price and volume to measure the intensity of money inflow/outflow. It is an effective leading indicator for capturing market sentiment overheating and recovery.
+**核心含义：** MFI 将价格与成交量结合，衡量资金流入流出的强度，是捕捉市场情绪过热与复苏的有效领先指标。
 
-**Overheating Signal (mfi_factor > 80):**
-- Money inflow intensity at extreme levels
-- Investor sentiment in the overheat zone
-- **Warning:** Profit-taking pressure increasing; market may be hitting a phase top
+**过热信号（mfi_factor > 80）：**
+- 资金流入强度达到极值
+- 投资者情绪进入过热区间
+- **预警：** 获利回吐压力增大，市场可能阶段性见顶
 
-**Oversold Signal (mfi_factor < 20):**
-- Money outflow pressure fully released
-- Market sentiment entering the ice point zone
-- **Opportunity:** Sentiment repair brewing; window for bottom-building positions
+**过冷信号（mfi_factor < 20）：**
+- 资金流出压力充分释放
+- 市场情绪进入冰点区域
+- **机会：** 情绪修复机会酝酿，低位布局窗口
 
-**Marginal Change Interpretation:**
-- mfi_factor rebounds quickly from lows → Money actively bottom-fishing, bullish signal
-- mfi_factor flattening at highs → Momentum exhaustion warning
-- mfi_factor turns from high to low → Sentiment shifting from hot to cold, confirms downtrend
+**边际变化解读：**
+- mfi_factor 从低位快速反弹 → 资金主动抄底，看多信号
+- mfi_factor 在高位走平 → 动能衰竭预警
+- mfi_factor 由高转低 → 情绪由热转冷，确认下行趋势
 
 ---
 
-### 3. leverage_factor (Leverage Factor)
+### 3. leverage_factor（融资杠杆因子）
 
-**Group:** Basic Momentum
+**大类：** 市场基础动能
 
-**Source Indicator:** Margin Buying Amount
+**原始指标：** 融资买入金额
 
-**Calculation:**
+**计算逻辑：**
 ```
-Margin_Buy_Amount_5d_ma -> rolling(5)
-leverage_factor = 180-day percentile rank of Margin_Buy_Amount_5d_ma
+融资买入金额_5日均值 → rolling(5)
+leverage_factor = 180日百分位化(融资买入金额_5日均值)
 ```
 
-**Core Meaning:** Leveraged investors' behavior is a key amplifier of market sentiment. Margin buying volume reflects leveraged money's willingness to go long. Its extreme values often correspond to sentiment phase tops (excessive optimism) or bottoms (excessive pessimism).
+**核心含义：** 杠杆型投资者的行为是市场情绪的重要放大器。融资买入金额反映杠杆资金的做多意愿，其极端值往往对应市场情绪的阶段性顶部（过度乐观）或底部（过度悲观）。
 
-**Overheating Signal (leverage_factor > 80):**
-- Leveraged money flooding in at scale
-- Market may be entering irrational optimism
-- **Warning:** Deleveraging risk accumulating; reversal can trigger severe cascade selling
+**过热信号（leverage_factor > 80）：**
+- 杠杆资金大规模涌入
+- 市场可能进入非理性乐观状态
+- **预警：** 杠杆资金平仓风险累积，一旦反转踩踏严重
 
-**Oversold Signal (leverage_factor < 20):**
-- Leveraged money severely contracted
-- Market sentiment extremely pessimistic
-- **Opportunity:** Can wait for bottom-building positions in this zone
+**过冷信号（leverage_factor < 20）：**
+- 杠杆资金大幅萎缩
+- 市场情绪极度悲观
+- **机会：** 可在底部区域等待布局机会
 
-**Marginal Change Interpretation:**
-- leverage_factor climbing rapidly → Leveraged money accelerating entry, sentiment warming
-- leverage_factor pulling back from highs → Margin buyers starting to exit, sentiment cooling
-- leverage_factor making new low then flattening → Panic may be bottoming
+**边际变化解读：**
+- leverage_factor 快速攀升 → 杠杆资金加速入场，情绪升温
+- leverage_factor 高位回落 → 融资客开始撤退，情绪转冷
+- leverage_factor 创阶段新低后走平 → 恐慌情绪可能见底
 
 ---
 
-### 4. pcr_factor (Options Put/Call Ratio Factor)
+### 4. pcr_factor（期权多空因子）
 
-**Group:** Basic Momentum
+**大类：** 市场基础动能
 
-**Source Indicator:** Options Open Interest PCR (Put/Call Ratio)
+**原始指标：** 期权持仓量 PCR（Put/Call Ratio）
 
-**Calculation:**
+**计算逻辑：**
 ```
-PCR = Put Option Open Interest / Call Option Open Interest
-pcr_factor = 180-day percentile rank of PCR
+PCR = 认沽期权持仓量 / 认购期权持仓量
+pcr_factor = 180日百分位化(PCR)
 ```
 
-**Core Meaning:** PCR reflects how bearish/bullish options market investors are on the outlook. High PCR means investors holding large put positions for downside hedging — often corresponds to short-term market highs; low PCR reflects optimism prevailing.
+**核心含义：** PCR 反映期权市场投资者对后市的看跌/看涨比例。PCR 高位意味着投资者大量持有认沽期权，对冲下行风险的需求强烈，往往对应市场短期高点；PCR 低位则反映乐观情绪占主导。
 
-**Overheating Signal (pcr_factor > 80):**
-- Put open interest far exceeds call open interest
-- Hedging demand surges, market cautious sentiment thickens
-- **Warning:** Historical pattern shows this zone frequently corresponds to short-term local highs
+**过热信号（pcr_factor > 80）：**
+- 认沽期权持仓量远超认购期权
+- 投资者对冲需求激增，市场谨慎情绪浓厚
+- **预警：** 历史规律显示此处常对应短期局部高点
 
-**Oversold Signal (pcr_factor < 20):**
-- Call open interest far exceeds put open interest
-- Market excessively optimistic, chasing sentiment euphoric
-- **Warning:** Optimism may be overextended; reversal risk building
+**过冷信号（pcr_factor < 20）：**
+- 认购期权持仓量远超认沽期权
+- 市场过度乐观，追涨情绪亢奋
+- **预警：** 乐观情绪可能过头，反转风险累积
 
-**Marginal Change Interpretation:**
-- pcr_factor rising rapidly from lows → Investor hedging awareness strengthening, bearish signal
-- pcr_factor pulling back from highs → Market tension easing, but not necessarily turning bullish
-- pcr_factor diverging from price (price up + PCR up) → Strong warning signal
+**边际变化解读：**
+- pcr_factor 由低位快速攀升 → 投资者对冲意识增强，看空信号
+- pcr_factor 由高位回落 → 市场紧张情绪缓解，但未必立即做多
+- pcr_factor 与价格出现背离（价格涨、PCR也涨）→ 强预警信号
 
 ---
 
-### 5. turnover_amount_factor (Turnover Activity Factor)
+### 5. turnover_amount_factor（流动活性因子）
 
-**Group:** Market Activity
+**大类：** 市场活跃度
 
-**Source Indicator:** Total Market Trading Amount + Turnover Rate
+**原始指标：** 全市场成交金额 + 换手率
 
-**Calculation:**
+**计算逻辑：**
 ```
-Trading_Amount_5d_ma -> rolling(5)
-tot_amount_percentile = 180-day percentile rank of Trading_Amount_5d_ma
-turnover_rate_percentile = 180-day percentile rank of Turnover_Rate_5d_ma
-turnover_amount_factor = (tot_amount_percentile + turnover_rate_percentile) / 2
+成交金额_5日均值 → rolling(5)
+tot_amount_factor = 180日百分位化(成交金额_5日均值)
+turnover_rate_factor = 180日百分位化(换手率_5日均值)
+turnover_amount_factor = (tot_amount_factor + turnover_rate_factor) / 2
 ```
 
-**Core Meaning:** High turnover and volume are correlated with investor excitement. When trading activity reaches historical highs, it often means the market is filled with excessively optimistic irrational sentiment. Extremely low activity reflects market lethargy and sentiment ice points.
+**核心含义：** 高换手率和成交量往往与投资者的兴奋情绪相关。当交易活跃度达到历史高位，往往意味着市场充斥着过度乐观的非理性情绪；但极端低活跃度也反映市场冷清、情绪冰点。
 
-**Overheating Signal (turnover_amount_factor > 80):**
-- Market abnormally active, turnover extremely high
-- Group speculation sentiment evident
-- **Warning:** Overcrowding risk; when sentiment reverses the selloff pressure is large
+**过热信号（turnover_amount_factor > 80）：**
+- 市场交易异常活跃，换手率极高
+- 群体性投机情绪明显
+- **预警：** 过度拥挤风险，一旦情绪反转抛压大
 
-**Oversold Signal (turnover_amount_factor < 20):**
-- Market trading severely shrunk
-- Investor participation willingness at ice point
-- **Opportunity:** Lethargic markets often harbor bottom reversals
+**过冷信号（turnover_amount_factor < 20）：**
+- 市场成交极度萎缩
+- 投资者参与意愿降至冰点
+- **机会：** 冷清市场往往酝酿底部反转
 
-**Marginal Change Interpretation:**
-- turnover_amount_factor spiking → Funds flooding in, sentiment warming rapidly
-- turnover_amount_factor consecutively declining at highs → Activity decaying, sentiment ebbing
-- turnover_amount_factor gently expanding from lows → Money slowly entering, bottom-building signal
+**边际变化解读：**
+- turnover_amount_factor 急速攀升 → 资金大量涌入，情绪快速升温
+- turnover_amount_factor 高位连续下降 → 活跃度衰减，情绪退潮
+- turnover_amount_factor 低位温和放大 → 资金缓慢进场，底部积累信号
 
 ---
 
-### 6. ar_factor (Activity Ratio Factor)
+### 6. ar_factor（人气活跃因子）
 
-**Group:** Basic Momentum
+**大类：** 市场基础动能
 
-**Source Indicator:** AR (Activative Ratio)
+**原始指标：** AR（Activative Ratio）
 
-**Calculation:**
+**计算逻辑：**
 ```
-AR = Sum(High - Open) / Sum(Open - Low), rolling(60 days)
-ar_factor = 180-day percentile rank of AR
+AR = Σ(最高价 - 开盘价) / Σ(开盘价 - 最低价)，rolling(60日)
+ar_factor = 180日百分位化(AR)
 ```
 
-**Core Meaning:** AR measures buying pressure's effect on the price center through the ratio of open price to intraday price range. High AR means price persistently closing in the upper intraday range (strong bullish candles), with strong market chasing momentum; low AR means sellers in control, price center shifting down.
+**核心含义：** AR 通过开盘价与日内价格波动区间的比值，衡量买方力量对价格中枢的推动效应。AR 高位表示价格持续收于日内高位区间（阳线强势），市场追涨情绪强；AR 低位则表示卖方主导，价格重心下移。
 
-**Overheating Signal (ar_factor > 80):**
-- Price persistently closing at intraday highs, buying pressure extremely strong
-- Market entering a frantic chasing phase
-- **Warning:** May be short-term overheated; risk of pullback after spike
+**过热信号（ar_factor > 80）：**
+- 价格持续收于日内高点，买方力量极强
+- 市场进入狂热追涨阶段
+- **预警：** 短期可能过热，冲高后回调风险大
 
-**Oversold Signal (ar_factor < 20):**
-- Price persistently closing at intraday lows, sellers in control
-- Investor participation willingness at ice point
-- **Opportunity:** May rebound after panic selling exhausts itself
+**过冷信号（ar_factor < 20）：**
+- 价格持续收于日内低位，卖方主导
+- 投资者参与意愿降至冰点
+- **机会：** 恐慌情绪释放后可能反弹
 
-**Marginal Change Interpretation:**
-- ar_factor rebounding quickly from lows → Buying pressure reasserting dominance
-- ar_factor flattening at highs → Momentum possibly exhausting
-- ar_factor diverging from price (price down but AR rising) → Warning signal
+**边际变化解读：**
+- ar_factor 由低位快速回升 → 买方力量重新主导
+- ar_factor 在高位走平 → 动能可能耗尽
+- ar_factor 与价格背离（价格跌但AR上升）→ 警示信号
 
 ---
 
-### 7. br_factor (Buy/Sell Ratio Factor)
+### 7. br_factor（多空买卖意愿因子）
 
-**Group:** Basic Momentum
+**大类：** 市场基础动能
 
-**Source Indicator:** BR (Bulls/Bears Ratio)
+**原始指标：** BR（Bulls/Bears Ratio）
 
-**Calculation:**
+**计算逻辑：**
 ```
-BR = Sum(High - PrevClose) / Sum(PrevClose - Low), rolling(60 days)
-br_factor = 180-day percentile rank of BR
+BR = Σ(最高价 - 昨收) / Σ(昨收 - 最低价)，rolling(60日)
+br_factor = 180日百分位化(BR)
 ```
 
-**Core Meaning:** BR focuses on position-holders' tolerance for price fluctuations, quantifying investor confidence by the relative position of close price within the fluctuation range. High BR means funds maintaining strong support at current levels, but position risk accumulating rapidly; low BR means panic selling fully released.
+**核心含义：** BR 聚焦持仓资金对价格波动的耐受度，通过收盘价与波动区间的相对位置量化投资者持筹信心。BR 高位表示资金在当前位置仍维持强势承接，但持仓风险快速累积；BR 低位则表示恐慌抛压已充分释放。
 
-**Overheating Signal (br_factor > 80):**
-- Funds still strongly supporting at high levels, position confidence strong
-- Market sentiment extremely optimistic
-- **Risk:** Watch for "momentum decay" signal (price up but BR stepping down)
+**过热信号（br_factor > 80）：**
+- 资金高位仍强势承接，持仓信心强
+- 市场情绪极度乐观
+- **风险：** 警惕"动能衰减"信号（价格涨但BR阶梯式下降）
 
-**Oversold Signal (br_factor < 20):**
-- Panic selling pressure fully released
-- Market entering sentiment repair window
-- **Opportunity:** Watch for "sentiment resilience" signal (price plunging but BR holding up)
+**过冷信号（br_factor < 20）：**
+- 恐慌性抛压充分释放
+- 市场进入情绪修复窗口
+- **机会：** 关注"情绪韧性"信号（价格急跌但BR抗跌）
 
-**Marginal Change Interpretation:**
-- br_factor trending lower at highs → Funds' position confidence loosening, bearish
-- br_factor flattening then rebounding from lows → Panic bottoming, bounce likely
-- br_factor diverging from price → Major player behavior signal, deserves close attention
+**边际变化解读：**
+- br_factor 高位下降趋势 → 资金持筹信心松动，看空
+- br_factor 低位走平后回升 → 恐慌见底，反弹可能
+- br_factor 与价格背离 → 主力行为信号，需重点关注
 
 ---
 
-### 8. emascore_long_factor (EMA Score Long Factor)
+### 8. emascore_long_factor（均线突破因子）
 
-**Group:** Trend Strength
+**大类：** 市场趋势强度
 
-**Source Indicator:** Multi-period Moving Averages (MA5/10/20/30/60/120 days)
+**原始指标：** 多周期均线（MA5/10/20/30/60/120日）
 
-**Calculation:**
+**计算逻辑：**
 ```
-Signal = Sum(multi-period MA long scores), rolling(60 days)
-emascore_factor = 180-day percentile rank of Sum(Signal)
-emascore_long_factor = 30-day rolling mean of emascore_factor
+信号 = Σ(各周期均线的多头排列得分)，rolling(60日)求和
+emascore_factor = 180日百分位化(Σ信号)
+emascore_long_factor = emascore_factor 的 30日滚动均值
 ```
 
-**Individual MA Signal Definitions:**
-- signal0: Close > MA30 → 0.1 points
-- signal1: MA5 > MA20 → 0.1 points
-- signal2: MA10 > MA20 → 0.1 points
-- signal3: MA10 > MA30 → 0.1 points
-- signal4: MA10 > MA60 → 0.1 points
-- signal5: MA10 > MA120 → 0.1 points
-- signal6: MA20 > MA60 → 0.1 points
-- signal7: MA20 trending up (today's MA20 > yesterday's MA20) → 0.1 points
-- signal8: MA60 trending up (today's MA60 > yesterday's MA60) → 0.1 points
-- signal9: SAR trend signal (Close > SAR) → 0.1 points
+**各均线信号定义：**
+- signal0: 收盘价 > MA30 → 0.1分
+- signal1: MA5 > MA20 → 0.1分
+- signal2: MA10 > MA20 → 0.1分
+- signal3: MA10 > MA30 → 0.1分
+- signal4: MA10 > MA60 → 0.1分
+- signal5: MA10 > MA120 → 0.1分
+- signal6: MA20 > MA60 → 0.1分
+- signal7: MA20向上趋势（当日MA20 > 昨日MA20）→ 0.1分
+- signal8: MA60向上趋势（当日MA60 > 昨日MA60）→ 0.1分
+- signal9: SAR 趋势信号（收盘价 > SAR）→ 0.1分
 
-**Core Meaning:** The EMA Score factor comprehensively evaluates the position of price relative to multiple moving averages and the direction of those averages. It is a core tool for judging market trend strength.
+**核心含义：** 均线突破因子综合评估价格与各周期均线的位置关系及均线方向，是判断市场趋势强度的核心工具。
 
-**Level Interpretation:**
+**档位解读：**
 
-| Percentile | Signal | Meaning |
+| 分位 | 信号 | 含义 |
 |---|---|---|
-| 80-100 | 🟢 Bullish | MAs in bullish alignment, trend up |
-| 60-80 | 🟡 Cautiously Bullish | Most MAs up, but monitor sustainability |
-| 40-60 | 🟠 Neutral | Balanced, trend unclear |
-| 20-40 | 🔴 Cautiously Bearish | Most MAs down, trend weak |
-| 0-20 | 🔴 Bearish | MAs in bearish alignment, trend down |
+| 80-100 | 🟢 看多 | 均线多头排列，趋势向上 |
+| 60-80 | 🟡 谨慎偏多 | 多数均线向上，但需观察持续性 |
+| 40-60 | 🟠 中性 | 多空均衡，趋势不明 |
+| 20-40 | 🔴 谨慎偏空 | 多数均线向下，趋势偏弱 |
+| 0-20 | 🔴 看空 | 均线空头排列，趋势向下 |
 
-**Marginal Change Interpretation:**
-- emascore_long_factor in uptrend → Trend strengthening, hold longs
-- emascore_long_factor declining from highs → Trend exhaustion, reduce position signal
-- emascore_long_factor golden cross from lows → Trend reversing, bullish signal
+**边际变化解读：**
+- emascore_long_factor 上升趋势 → 趋势加强，持有多头
+- emascore_long_factor 高位下降 → 趋势衰竭，减仓信号
+- emascore_long_factor 低位金叉向上 → 趋势逆转，看多信号
 
 ---
 
-### 9. signal_macd_factor (Trend Divergence Factor)
+### 9. signal_macd_factor（趋势背离因子）
 
-**Group:** Trend Strength
+**大类：** 市场趋势强度
 
-**Source Indicator:** MACD (Moving Average Convergence Divergence)
+**原始指标：** MACD（Moving Average Convergence Divergence）
 
-**Calculation:**
+**计算逻辑：**
 ```
-EMA1 = 10-day EMA of Close
-EMA2 = 25-day EMA of Close
+EMA1 = 收盘价的10日指数移动平均
+EMA2 = 收盘价的25日指数移动平均
 DIFF = EMA1 - EMA2
-DEM = 9-day MA of DIFF
+DEM = DIFF的9日移动平均
 MACD = DIFF - DEM
 
-signal7 = (MACD_today - MACD_yesterday > 0) ? 1 : 0
-signal8 = (MACD_today - MACD_yesterday > 0 AND DIFF > 0) ? 1 : 0
-signal9 = (DIFF > 0) ? 1 : 0
+signal7 = (MACD今日 - MACD昨日 > 0) → 1 : 0
+signal8 = (MACD今日 - MACD昨日 > 0 且 DIFF > 0) → 1 : 0
+signal9 = (DIFF > 0) → 1 : 0
 
-signal8_sum = Sum signal8, rolling(20 days)
-signal9_sum = Sum signal9, rolling(20 days)
+signal8_sum = Σ signal8，rolling(20日)
+signal9_sum = Σ signal9，rolling(20日)
 
-signal_macd_factor = 180-day percentile rank of ((signal8_sum + signal9_sum)/2)
-signal_macd_factor = 20-day rolling mean of signal_macd_factor
+signal_macd_factor = 180日百分位化((signal8_sum + signal9_sum)/2)
+signal_macd_factor = signal_macd_factor 的 20日滚动均值
 ```
 
-**Core Meaning:** MACD is a classic trend-following indicator. signal7 judges MACD momentum direction; signal8 confirms trend strength (MACD up AND DIFF > 0 = healthy uptrend); signal9 reflects average price momentum direction. The three are fused and smoothed to reduce noise.
+**核心含义：** MACD 是经典的趋势跟踪指标。signal7 判断 MACD 动量方向；signal8 确认趋势强度（MACD 向上且 DIFF > 0 表示上涨趋势健康）；signal9 反映均价动量方向。三者融合后平滑处理，减少噪声。
 
-**Overheating Signal (signal_macd_factor > 80):**
-- MACD bullish signals strong
-- DIFF continuously expanding above zero line
-- Trend continuity good, but watch for high-level plateau
+**过热信号（signal_macd_factor > 80）：**
+- MACD 多头信号强烈
+- DIFF 在零轴上方持续扩张
+- 趋势延续性较好，但需警惕高位钝化
 
-**Oversold Signal (signal_macd_factor < 20):**
-- MACD bearish signals dominant
-- DIFF running below zero line
-- Trend down, but may be brewing bottom divergence
+**过冷信号（signal_macd_factor < 20）：**
+- MACD 空头信号主导
+- DIFF 在零轴下方运行
+- 趋势向下，但可能酝酿底部背离
 
-**Marginal Change Interpretation:**
-- signal_macd_factor turning from low to high + DIFF crossing above zero → Trend confirmed up, long signal
-- signal_macd_factor declining at highs (but DIFF still above zero) → Upward momentum fading, caution
-- signal_macd_factor turning from high to low + DIFF crossing below zero → Trend confirmed down, exit signal
-- MACD positive divergence with price (price makes new low but MACD does not) → Strong bottom-fishing signal
+**边际变化解读：**
+- signal_macd_factor 由低转高 + DIFF 上穿零轴 → 趋势确认向上，做多信号
+- signal_macd_factor 高位下降（但 DIFF 仍在零轴上）→ 上涨动能衰减，谨慎
+- signal_macd_factor 由高转低 + DIFF 下穿零轴 → 趋势确认向下，清仓信号
+- MACD 与价格底背离（价格新低但 MACD 未新低）→ 强预警抄底信号
 
 ---
 
-### 10. highlow_factor (High-Low Momentum Factor)
+### 10. highlow_factor（上涨势能因子）
 
-**Group:** Short-term Momentum
+**大类：** 短期势能
 
-**Source Indicator:** 10-day slope comparison of High/Low/Close prices
+**原始指标：** 最高价/最低价/收盘价的10日斜率比较
 
-**Calculation:**
+**计算逻辑：**
 ```
-Uptrend:
-  K_max = (High_{t-1} - High_{t-2}) / High_{t-2}
-  K_min = (Low_{t-1} - Low_{t-2}) / Low_{t-2}
-  Signal = 1 (if Close up AND K_max > K_min)
+上涨行情下：
+  K_max = (最高价_{t-1} - 最高价_{t-2}) / 最高价_{t-2}
+  K_min = (最低价_{t-1} - 最低价_{t-2}) / 最低价_{t-2}
+  信号 = 1（若 收盘价上涨 且 K_max > K_min）
 
-Downtrend:
-  Signal = 1 (if Close down AND K_min < K_max)
-  (Low slope relatively steeper = bottom supported)
+下跌行情下：
+  信号 = 1（若 收盘价下跌 且 K_min < K_max）
+  （即最低价斜率相对更陡，说明底部有支撑）
 
-highlow_signal = Sum Signal, rolling(20 days)
-highlow_factor = 180-day percentile rank of highlow_signal
+highlow_signal = Σ 信号，rolling(20日)
+highlow_factor = 180日百分位化(highlow_signal)
 ```
 
-**Core Meaning:** The high-low momentum factor judges current momentum strength by capturing relative changes in high and low price slopes. In uptrends, if the high price slope leads the low price slope → uptrend momentum healthy; in downtrends, if the low price doesn't make new lows → bottom support, potential reversal.
+**核心含义：** 上涨势能因子通过捕捉价格高点和低点斜率的相对变化，判断当前行情的动量强度。涨市中最高价斜率领先最低价斜率 → 上涨动量健康；跌市中最低价斜率未创新低 → 底部有支撑，可能反转。
 
-**Overheating Signal (highlow_factor > 80):**
-- Consecutive 20 days mostly showing strong momentum characteristics
-- In uptrends: highs continuously making new highs with increasing slope → extreme momentum
-- **Note:** This factor changes frequently; may oscillate in range-bound markets
+**过热信号（highlow_factor > 80）：**
+- 连续20日多数交易日呈现强动量特征
+- 上涨行情中：最高价持续创新高且斜率递增 → 动量极强
+- **注意：** 该因子变化频率高，在无趋势市场中可能反复震荡
 
-**Oversold Signal (highlow_factor < 20):**
-- Consecutive 20 days mostly showing weak momentum or reversal characteristics
-- In downtrends: lows continuously making new lows
-- **Opportunity:** After bottom formation, if highlow_factor stabilizes and rebounds, it indicates a reversal
+**过冷信号（highlow_factor < 20）：**
+- 连续20日多数交易日呈现弱动量或反转特征
+- 下跌行情中：最低价持续创新低
+- **机会：** 底部形态形成后，若 highlow_factor 企稳反弹，预示反转
 
-**Marginal Change Interpretation:**
-- highlow_factor rising rapidly from lows → Momentum shifting from weak to strong, short-term long signal
-- highlow_factor declining from highs → Short-term momentum fading, may consolidate or pull back
-- highlow_factor first rising after low-level plateau → Worth watching closely; may be precursor to trend reversal
+**边际变化解读：**
+- highlow_factor 由低位快速上升 → 动量由弱转强，短期做多信号
+- highlow_factor 在高位下降 → 短期动能衰减，可能震荡或回调
+- highlow_factor 低位钝化后首次上升 → 重点关注，可能是趋势反转前兆
 
 ---
 
-### 11. RSI_factor (Relative Strength Index Factor)
+### 11. RSI_factor（相对强弱因子）
 
-**Group:** Basic Momentum
+**大类：** 市场基础动能
 
-**Source Indicator:** RSI (Relative Strength Index)
+**原始指标：** RSI（Relative Strength Index）
 
-**Calculation:**
+**计算逻辑：**
 ```
-Up-day gains / Down-day absolute losses -> build change sequence
-RSI1 = 12-period RSI
-RSI2 = 25-period RSI
-RSI3 = 40-period RSI
-signal10_RSI = Sum RSI1, rolling(5 days)
-RSI_factor = 180-day percentile rank of signal10_RSI
+上涨日涨幅 / 下跌日绝对跌幅 → 构建变动序列
+RSI1 = 12日周期 RSI
+RSI2 = 25日周期 RSI
+RSI3 = 40日周期 RSI
+signal10_RSI = Σ RSI1，rolling(5日)
+RSI_factor = 180日百分位化(signal10_RSI)
 ```
 
-**Core Meaning:** RSI measures the speed and magnitude of price changes. It is a classic indicator for judging market overbought/oversold conditions. This system uses multi-period RSI fusion to reduce false signals from single-period indicators.
+**核心含义：** RSI 衡量价格变动的速度和幅度，是判断市场超买超卖的经典指标。本体系使用多周期 RSI 融合，减少单周期指标的假信号。
 
-**Overheating Signal (RSI_factor > 80):**
-- RSI at historical highs, market overbought
-- Investor sentiment too aggressive
-- **Warning:** May face short-term pullback pressure
+**过热信号（RSI_factor > 80）：**
+- RSI 处于历史高位，市场超买
+- 投资者情绪过于激烈
+- **预警：** 可能面临短期回调压力
 
-**Oversold Signal (RSI_factor < 20):**
-- RSI at historical lows, market oversold
-- Investor sentiment excessively pessimistic
-- **Opportunity:** Oversold zone is often a bottom-building opportunity
+**过冷信号（RSI_factor < 20）：**
+- RSI 处于历史低位，市场超卖
+- 投资者情绪过度悲观
+- **机会：** 超卖区域往往是布局时机
 
-**Marginal Change Interpretation:**
-- RSI_factor rebounding from lows + breaking through 50 midpoint → Medium-term rebound confirmed
-- RSI_factor pulling back from highs → Momentum fading, reduce position signal
-- RSI negative divergence with price (price makes new high but RSI does not) → Strong warning signal
-- RSI positive divergence with price (price makes new low but RSI does not) → Bottom-fishing signal
+**边际变化解读：**
+- RSI_factor 由低位回升 + 突破50中轴 → 中期反弹确认
+- RSI_factor 由高位回落 → 动能衰减，减仓信号
+- RSI 与价格顶背离（价格创新高但 RSI 未创新高）→ 强预警信号
+- RSI 与价格底背离（价格创新低但 RSI 未创新低）→ 抄底信号
 
 ---
 
-### 12. daily_return_factor (Daily Return Factor)
+### 12. daily_return_factor（日收益率因子）
 
-**Group:** Basic Momentum
+**大类：** 市场基础动能
 
-**Source Indicator:** Moving average of daily returns
+**原始指标：** 日收益率的移动平均
 
-**Calculation:**
+**计算逻辑：**
 ```
-Daily Return = (Close - PrevClose) / PrevClose
-Daily_Return_30d_ma -> rolling(30)
-daily_return_factor = 180-day percentile rank of Daily_Return_30d_ma
+日收益率 = (收盘价 - 昨收盘价) / 昨收盘价
+日收益率_30日均值 → rolling(30)
+daily_return_factor = 180日百分位化(日收益率_30日均值)
 ```
 
-**Core Meaning:** Reflects the index's short-term (30-day) average return level — the most direct indicator of short-term market performance.
+**核心含义：** 反映指数短期（30日）的平均收益水平，是市场短期表现的最直接体现。
 
-**Overheating Signal (daily_return_factor > 80):**
-- Short-term cumulative gain at historical highs
-- Market short-term performance extremely strong
-- **Warning:** Short-term gains too large, profit-taking pressure high
+**过热信号（daily_return_factor > 80）：**
+- 短期累计涨幅处于历史高位
+- 市场短期表现极强
+- **预警：** 短期涨幅过大，获利回吐压力大
 
-**Oversold Signal (daily_return_factor < 20):**
-- Short-term cumulative loss at historical lows
-- Market short-term performance extremely weak
-- **Opportunity:** Rebound probability high after oversold
+**过冷信号（daily_return_factor < 20）：**
+- 短期累计跌幅处于历史低位
+- 市场短期表现极弱
+- **机会：** 超跌后反弹概率大
 
-**Marginal Change Interpretation:**
-- daily_return_factor climbing rapidly → Short-term profit effect strong, sentiment euphoric
-- daily_return_factor pulling back from highs → Short-term profit effect weakening
-- daily_return_factor flattening at lows → Downside momentum slowing, bottom building
+**边际变化解读：**
+- daily_return_factor 快速攀升 → 短期赚钱效应强，情绪高涨
+- daily_return_factor 高位回落 → 短期赚钱效应减弱
+- daily_return_factor 低位走平 → 跌势趋缓，底部积累
 
 ---
 
-### 13. up_number_rate_factor (Market Breadth Factor)
+### 13. up_number_rate_factor（市场广度因子）
 
-**Group:** Breadth Consistency
+**大类：** 广度一致性
 
-**Source Indicator:** Ratio of rising stocks across the whole market
+**原始指标：** 全市场上涨股票比例
 
-**Calculation:**
+**计算逻辑：**
 ```
-Up Ratio = Rising Stock Count / (Rising Stock Count + Falling Stock Count)
-Up_Ratio_20d_ma -> rolling(20)
-up_number_rate_factor = 180-day percentile rank of Up_Ratio_20d_ma
+上涨比例 = 上涨股票数 / (上涨股票数 + 下跌股票数)
+上涨比例_20日均值 → rolling(20)
+up_number_rate_factor = 180日百分位化(上涨比例_20日均值)
 ```
 
-**Core Meaning:** Market breadth reflects the consistency of up/down movements across individual stocks. It is an important indicator of market sentiment breadth. Breadth trending up means more stocks rising, sentiment spreading healthily; breadth declining means individual stocks diverging or universally falling, sentiment contracting.
+**核心含义：** 市场广度因子反映全市场个股的涨跌一致性，是判断市场情绪广度的重要指标。广度因子趋势向上说明个股上涨家数增多，情绪蔓延健康；广度因子下降说明个股分化或普遍下跌，情绪收缩。
 
-**Overheating Signal (up_number_rate_factor > 80):**
-- Vast majority of stocks rising, market sentiment highly consistent
-- Group bullish sentiment euphoric
-- **Warning:** After excessive consistency, stampede risk is high
+**过热信号（up_number_rate_factor > 80）：**
+- 绝大多数个股上涨，市场情绪高度一致
+- 群体性做多情绪亢奋
+- **预警：** 一致性过高后容易出现踩踏
 
-**Oversold Signal (up_number_rate_factor < 20):**
-- Vast majority of stocks falling, market sentiment extremely pessimistic
-- Panic sentiment in control
-- **Opportunity:** Often bounce follows sentiment ice points
+**过冷信号（up_number_rate_factor < 20）：**
+- 绝大多数个股下跌，市场情绪极度悲观
+- 恐慌情绪主导
+- **机会：** 情绪冰点后往往迎来反弹
 
-**Marginal Change Interpretation:**
-- up_number_rate_factor rising → Number of rising stocks expanding, sentiment continuing healthily
-- up_number_rate_factor falling + index not falling → Divergence (index holding but stocks retreating) → Warning
-- up_number_rate_factor rebounding from lows → Sentiment recovery signal
+**边际变化解读：**
+- up_number_rate_factor 上升 → 上涨家数扩散，情绪健康延续
+- up_number_rate_factor 下降 + 指数未跌 → 背离（指数撑住但个股在退潮）→ 预警
+- up_number_rate_factor 低位回升 → 情绪复苏信号
 
 ---
 
-### 14. equity_bond_effective_factor (Equity-Bond Effectiveness / Crowding Factor)
+### 14. equity_bond_effective_factor（广义拥挤度因子）
 
-**Group:** Basic Momentum
+**大类：** 市场基础动能
 
-**Source Indicator:** CSI 300 P/E reciprocal + Total market trading amount
+**原始指标：** 沪深300 PE 倒数 + 全市场成交金额
 
-**Calculation:**
+**计算逻辑：**
 ```
-X_normalized = (X - min_180) / (max_180 - min_180) * 100
+X_normalized = (X - min_180) / (max_180 - min_180) × 100
 
-PE_reciprocal_normalized = normalize(1 / CSI300_PE)
-tot_amount_normalized = normalize(Trading_Amount)
+PE_reciprocal_normalized = 标准化(1/沪深300_PE)
+tot_amount_normalized = 标准化(成交金额)
 
 factor_index = PE_reciprocal_normalized - tot_amount_normalized
-(High yield -> optimism; High volume -> crowding; so subtraction)
+（赔率高→乐观，成交量高→拥挤，故相减）
 
-gap_5d_ma = rolling(factor_index, 5)
-gap_60d_ma = rolling(factor_index, 60)
-gap_marginal = gap_5d_ma - gap_60d_ma
+差值_5日均值 = rolling(factor_index, 5)
+差值_60日均值 = rolling(factor_index, 60)
+gap_marginal = 差值_5日均值 - 差值_60日均值
 
-equity_bond_effective_factor = 100 - 180-day percentile rank of gap_marginal
+equity_bond_effective_factor = 100 - 180日百分位化(gap_marginal)
 ```
 
-**Core Meaning:** The equity-bond effectiveness factor combines two dimensions: valuation (yield) and trading crowding. High yield (low P/E) means equity assets are relatively more attractive; high trading volume means market is crowded and sentiment overheated. The core logic: when yield is low but trading is active, the market is most dangerous (crowded trading).
+**核心含义：** 广义拥挤度因子综合考虑估值（赔率）与交易拥挤度两个维度。赔率高（PE 低）表示权益资产相对吸引力强；成交金额高表示市场交易拥挤、情绪过热。该因子的核心逻辑是：当赔率低但成交活跃时，市场最危险（拥挤交易）。
 
-**Overheating Signal (equity_bond_effective_factor > 80, equivalent to gap_marginal at lows):**
-- Low yield (high P/E) + active trading -> Market excessively crowded
-- Marginal change negative: crowding is intensifying
-- **Strong Warning:** Historical backtesting shows this zone is an important risk signal
+**过热信号（equity_bond_effective_factor > 80，等效于 gap_marginal 低位）：**
+- 赔率低（PE 高）+ 成交活跃 → 市场过度拥挤
+- 边际变化为负：拥挤度在加剧
+- **强预警：** 历史回测显示此处为重要风险信号
 
-**Oversold Signal (equity_bond_effective_factor < 20, equivalent to gap_marginal at highs):**
-- High yield (low P/E) + cold trading -> Market excessively pessimistic
-- Marginal change positive: sentiment repair signal
-- **Opportunity:** Low crowding + high yield = relatively good entry zone
+**过冷信号（equity_bond_effective_factor < 20，等效于 gap_marginal 高位）：**
+- 赔率高（PE 低）+ 成交冷清 → 市场过度悲观
+- 边际变化为正：情绪修复信号
+- **机会：** 低拥挤 + 高赔率 = 较好的布局区间
 
-**Marginal Change Interpretation:**
-- equity_bond_effective_factor 5-day MA > 60-day MA (golden cross) -> Crowding declining, opportunity signal
-- equity_bond_effective_factor 5-day MA < 60-day MA (death cross) -> Crowding rising, risk signal
-- This factor is the most important reversal-type factor in the system; its directional changes deserve close attention
+**边际变化解读：**
+- equity_bond_effective_factor 的 5日均值 > 60日均值（金叉）→ 拥挤度下降，机会信号
+- equity_bond_effective_factor 的 5日均值 < 60日均值（死叉）→ 拥挤度上升，风险信号
+- 该因子是本体系中最重要的反转类因子，需重点关注其方向变化
 
 ---
 
-## Factor Interactions and Common Patterns
+## 因子共性与交互说明
 
-**Trend-Following Factors (momentum direction):**
-- emascore_long_factor, signal_macd_factor, daily_return_factor, highlow_factor
-- These have clear directional signals, suitable for trend-following
+**趋势类因子（看动量方向）：**
+- emascore_long_factor、signal_macd_factor、daily_return_factor、highlow_factor
+- 这些因子方向明确，适合顺势操作
 
-**Overbought/Oversold Factors (extreme positions):**
-- mfi_factor, RSI_factor, ar_factor, br_factor
-- High levels warn of pullback risk; low levels warn of rebound opportunity
+**超买超卖类因子（看极端位置）：**
+- mfi_factor、RSI_factor、ar_factor、br_factor
+- 高位预警回调风险，低位预警反弹机会
 
-**Money Flow & Crowding Factors (capital and structure):**
-- obv_factor, leverage_factor, pcr_factor, turnover_amount_factor, equity_bond_effective_factor
-- These are better at predicting medium-to-long-term turning points
+**资金与拥挤度类因子（看资金与结构）：**
+- obv_factor、leverage_factor、pcr_factor、turnover_amount_factor、equity_bond_effective_factor
+- 这些因子更能预判中长期拐点
 
-**Breadth Factors (trend health confirmation):**
+**广度类因子（确认趋势健康性）：**
 - up_number_rate_factor
-- In trending markets, breadth factor must align with price direction; divergence is a warning
+- 趋势行情中广度因子需与价格方向一致，否则背离预警

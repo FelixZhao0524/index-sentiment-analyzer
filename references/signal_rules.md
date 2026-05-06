@@ -1,188 +1,188 @@
-# Signal Interpretation Rules
+# 信号解读规则
 
-This document defines interpretation rules for the sentiment index and individual factor signals, including warning conditions, level meanings, marginal change interpretation, and extreme scenario detection.
-
----
-
-## 1. Composite Sentiment Index (sentiment_index_avg60_plus)
-
-### Core Meaning
-
-`sentiment_index_avg60_plus` is the equal-weighted composite score of 6 major factor groups, processed through a 180-day percentile rank normalization, with a value range of 0-100.
-
-Equal-weight fusion of 6 major groups:
-```
-Composite Factor = (Basic Momentum + Trend Strength + Market Activity + Short-term Momentum + Fund Flow + Breadth Consistency) / 6
-Composite_60d_ma -> rolling(60)
-sentiment_index_avg60_plus = 180-day percentile rank of Composite_60d_ma
-```
-
-> Note: sentiment_index_avg60_plus output is between 0-100, reflecting the current sentiment's percentile position relative to the last 180 trading days.
+本文档定义情绪指数与各因子信号的解读规则，包括预警条件、档位含义、边际变化解读与极端场景判断。
 
 ---
 
-## 2. Core Warning Rules (Most Important)
+## 一、综合情绪指数（sentiment_index_avg60_plus）
 
-### Warning Trigger Conditions (Both Required)
+### 原始含义
 
-1. `sentiment_index_avg60_plus == 100` (reaching historical highest percentile)
-2. **Next-day value declining sequentially** (turning point appears)
+`sentiment_index_avg60_plus` 是 6 大类因子等权融合后的综合得分，再经过 180 日百分位化处理，取值范围 0-100。
+
+6 大类因子等权融合：
+```
+综合因子 = (市场基础动能 + 市场趋势强度 + 市场活跃度 + 短期势能 + 资金流向 + 广度一致性) / 6
+综合因子_60日均值 → rolling(60)
+sentiment_index_avg60_plus = 180日百分位化(综合因子_60日均值)
+```
+
+> 注：sentiment_index_avg60_plus 的计算结果在 0-100 之间，反映当前情绪相对历史 180 个交易日的分位位置。
+
+---
+
+## 二、核心预警规则（最重要）
+
+### 预警触发条件（同时满足）
+
+1. `sentiment_index_avg60_plus == 100`（达到历史最高分位）
+2. **次日数值环比下降**（出现拐点）
 
 ```
-Warning Signal = (Today's_sentiment == 100) AND (Today's_sentiment > Tomorrow's_sentiment)
+预警信号 = (今日_sentiment == 100) AND (今日_sentiment > 明日_sentiment)
 ```
 
-### Warning Meaning
+### 预警含义
 
-When a warning fires, it means market trading has become extremely crowded, or there is excessive irrational optimism. This is the highest historical win-rate risk warning signal in the system.
+发出预警时，说明市场交易已极度拥挤，或存在较多非理性乐观情绪，是历史胜率最高的风险预警信号。
 
-### Historical Statistics (January 2017 — August 2025)
+### 历史统计（2017年1月 - 2025年8月）
 
-| Metric | Value |
+| 指标 | 数值 |
 |---|---|
-| Total warning count | 7 |
-| Warnings followed by >10% drawdown | 6 |
-| **Warning win rate** | **85.71%** |
-| Average max drawdown | -13.77% |
-| Largest single drawdown | -32.46% (late 2017) |
-| Average lead time after warning | ~19 trading days |
-| Average drawdown duration | ~101 trading days |
-| Large drawdown capture rate | **100%** (all drawdowns >20% were warned in advance) |
+| 预警总次数 | 7次 |
+| 预警后回撤超10%的次数 | 6次 |
+| **预警胜率** | **85.71%** |
+| 平均最大回撤 | -13.77% |
+| 最大单次回撤 | -32.46%（2017年底） |
+| 预警后平均提前量 | 约19天 |
+| 平均回撤持续时间 | 约101天 |
+| 大幅回撤捕捉率 | **100%**（回撤>20%的行情全部提前预警） |
 
 ---
 
-## 3. Sentiment Index Level Interpretation
+## 三、情绪指数档位解读
 
-### Absolute Position (Current Reading)
+### 绝对位置（当前读数）
 
-| Percentile Range | Status | Color | Meaning |
+| 分位区间 | 状态 | 颜色 | 含义 |
 |---|---|---|---|
-| 100 + turning point | 🔴 **Warning Signal** | Red | Extreme overheat; reduce position opportunistically |
-| 90-99 | 🟠 Extremely Optimistic | Orange | Approaching overheat; watch closely |
-| 80-89 | 🟠 Excessively Optimistic | Orange | Possibly overheating; take profits |
-| 70-79 | 🟡 Optimistic-Warm | Yellow | Good sentiment; can hold positions |
-| 60-69 | 🟡 Warm | Yellow | Neutral-bullish |
-| 50-59 | 🟢 Neutral-Warm | Green | Normal range |
-| 40-49 | 🟢 Neutral | Green | Normal range |
-| 30-39 | 🔵 Cool | Blue | Neutral-weak |
-| 20-29 | 🔵 Pessimistic-Cool | Blue | Weak sentiment |
-| 10-19 | 🔵 Excessively Pessimistic | Blue | Near ice point; watch for opportunity |
-| 0-9 | 🔵 Extremely Pessimistic | Blue | Ice point; sentiment extreme |
+| 100 + 拐点 | 🔴 **预警信号** | 红 | 极端过热，择机减仓 |
+| 90-99 | 🟠 极度乐观 | 橙 | 接近过热，密切观察 |
+| 80-89 | 🟠 过度乐观 | 橙 | 可能过热，注意止盈 |
+| 70-79 | 🟡 乐观偏热 | 黄 | 情绪较好，可持有 |
+| 60-69 | 🟡 偏热 | 黄 | 中性偏多 |
+| 50-59 | 🟢 中性偏热 | 绿 | 正常区间 |
+| 40-49 | 🟢 中性 | 绿 | 正常区间 |
+| 30-39 | 🔵 偏冷 | 蓝 | 中性偏弱 |
+| 20-29 | 🔵 悲观偏冷 | 蓝 | 情绪较弱 |
+| 10-19 | 🔵 过度悲观 | 蓝 | 接近冰点，关注机会 |
+| 0-9 | 🔵 极度悲观 | 蓝 | 冰点区域，情绪极端 |
 
 ---
 
-## 4. Marginal Change Interpretation (Slope Analysis)
+## 四、边际变化解读（斜率分析）
 
-Marginal change is a core tool for judging sentiment trend direction, compensating for the limitation that absolute position can only show "cold/hot" but not "direction."
+边际变化是判断情绪趋势方向的核心工具，弥补了绝对位置只能看"冷热"而不能看"方向"的不足。
 
-### Calculation Method
+### 计算方法
 
 ```python
-# 5-day slope (short-term marginal change)
+# 5日斜率（短期边际变化）
 slope_5 = sentiment_index_avg60_plus.diff(5) / 5
 
-# 20-day slope (medium-term marginal change)
+# 20日斜率（中期边际变化）
 slope_20 = sentiment_index_avg60_plus.diff(20) / 20
 
-# Difference between 5-day MA and 20-day MA (judge directional health)
+# 5日均值与20日均值的差值（判断方向健康性）
 ema_5 = sentiment.rolling(5).mean()
 ema_20 = sentiment.rolling(20).mean()
 ema_cross = ema_5 - ema_20
 ```
 
-### Marginal Change Levels
+### 边际变化档位
 
-| slope_5 | Direction | Meaning |
+| slope_5 | 方向 | 含义 |
 |---|---|---|
-| > +2/day | Strong Warming | Sentiment warming rapidly; watch for short-term overheat |
-| +1 ~ +2/day | Moderate Warming | Sentiment gradually improving |
-| 0 ~ +1/day | Steady Slight Rise | No clear direction; slow change |
-| -1 ~ 0/day | Steady Slight Fall | No clear direction; slow contraction |
-| -2 ~ -1/day | Moderate Cooling | Sentiment gradually weakening |
-| < -2/day | Strong Cooling | Sentiment ebbing rapidly |
+| > +2/日 | 强势升温 | 情绪快速升温，注意短期过热 |
+| +1 ~ +2/日 | 温和升温 | 情绪逐步改善 |
+| 0 ~ +1/日 | 平稳偏升 | 无明显方向，缓慢变化 |
+| -1 ~ 0/日 | 平稳偏降 | 无明显方向，缓慢收缩 |
+| -2 ~ -1/日 | 温和降温 | 情绪逐步转弱 |
+| < -2/日 | 强势降温 | 情绪快速退潮 |
 
-### EMA Crossover Signals (EMA5 vs EMA20)
+### EMA 交叉信号（EMA5 vs EMA20）
 
-| Crossover Type | Signal | Meaning |
+| 交叉类型 | 信号 | 含义 |
 |---|---|---|
-| EMA5 crosses above EMA20 | 🟢 Golden Cross | Medium-term trend shifting from weak to strong; bullish signal |
-| EMA5 crosses below EMA20 | 🔴 Death Cross | Medium-term trend shifting from strong to weak; bearish signal |
-| EMA5 above EMA20 and both rising | 🟢 Strong Bullish | Trend healthy; hold signal |
-| EMA5 above EMA20 but both falling | 🟡 Bullish Fading | Uptrend weakening; stay alert |
-| EMA5 below EMA20 and both falling | 🔴 Strong Bearish | Downtrend dominating |
-| EMA5 below EMA20 but both rising | 🟡 Bearish Fading | Downtrend weakening; bottom building |
+| EMA5 上穿 EMA20 | 🟢 金叉 | 中期趋势由弱转强，看多信号 |
+| EMA5 下穿 EMA20 | 🔴 死叉 | 中期趋势由强转弱，看空信号 |
+| EMA5 在 EMA20 上方且两者均上升 | 🟢 强势多头 | 趋势健康，持有信号 |
+| EMA5 在 EMA20 上方但两者均下降 | 🟡 多头衰减 | 上涨趋势减弱，需警惕 |
+| EMA5 在 EMA20 下方且两者均下降 | 🔴 强势空头 | 下跌趋势主导 |
+| EMA5 在 EMA20 下方但两者均上升 | 🟡 空头衰减 | 下跌趋势减弱，底部积累 |
 
-### Combined Signal Matrix
+### 综合信号矩阵
 
-| | Absolute Position High (>60) | Absolute Position Mid (40-60) | Absolute Position Low (<40) |
+| | 绝对位置高(>60) | 绝对位置中(40-60) | 绝对位置低(<40) |
 |---|---|---|---|
-| **Slope Up** | 🟡 Overheat + Warming = Watch for spike-then-pullback | 🟢 Neutral + Warming = Trend improving | 🔵 Oversold + Warming = Bottom rebound opportunity |
-| **Slope Steady** | 🟠 Overheat + Steady = Hold but don't chase | 🟢 Neutral = Normal holding | 🔵 Oversold + Steady = Wait for signal |
-| **Slope Down** | 🔴 Overheat + Cooling = **Warning reduce position** | 🔵 Neutral + Cooling = Cautiouswait-and-watch | 🔵 Oversold + Cooling = Bottom deepening |
+| **斜率向上** | 🟡 偏热+升温 = 注意冲高回落 | 🟢 中性+升温 = 趋势向好 | 🔵 过冷+升温 = 底部反弹机会 |
+| **斜率平稳** | 🟠 过热+平稳 = 持有但不追 | 🟢 中性 = 正常持仓 | 🔵 过冷+平稳 = 等待信号 |
+| **斜率向下** | 🔴 过热+降温 = **预警减仓** | 🔵 中性+降温 = 谨慎观望 | 🔵 过冷+降温 = 底部深化 |
 
 ---
 
-## 5. 10-Class Sentiment Scenario Matrix
+## 五、10类情绪场景矩阵
 
-Combining absolute position with marginal change, market sentiment is classified into 10 scenarios; 4 are extreme scenarios requiring close attention:
+结合绝对位置与边际变化，将市场情绪分为10类场景，其中4类为极端场景需重点关注：
 
 ```
-            | Marginal Up  | Marginal Steady | Marginal Down
-High (>80)  | 1.Optimism Accelerating | 2.Optimism Flattening | 3.Overheat Warning🔥 <- Key Warning
-Mid (40-80) | 4.Sentiment Recovery | 5.Sentiment Stable | 6.Sentiment Cooling
-Low (<40)   | 7.Rebound Opportunity | 8.Bottom Building | 9.Panic Brewing🔥 <- Key Warning
+            | 边际变化向上 | 边际变化平稳 | 边际变化向下
+绝对高位(>80) | 1.乐观加速  | 2.乐观钝化  | 3.过热预警🔥  ← 重点预警
+绝对中位(40-80)| 4.情绪复苏  | 5.情绪稳定  | 6.情绪降温
+绝对低位(<40) | 7.反弹机会  | 8.底部整理  | 9.恐慌酝酿🔥  ← 重点预警
 ```
 
-### 4 Extreme Scenarios Explained
+### 4类极端场景详解
 
-**Scenario 1: Excessively Optimistic + Warming (High Absolute + Slope Up)**
-- Characteristics: Sentiment index above 80 and continuing to climb
-- Meaning: Market surging rapidly with euphoric upward movement
-- Warning Level: ⚠️⚠️⚠️ (Very High)
-- Action: Gradually reduce positions; do not chase
+**场景1：过度乐观升温状态（绝对高位 + 斜率向上）**
+- 特征：情绪指数在80以上且继续攀升
+- 含义：市场急速拉涨与亢奋上行
+- 预警级别：⚠️⚠️⚠️（极高）
+- 建议：逐步减仓，不追涨
 
-**Scenario 3: Excessively Optimistic + Cooling (High Absolute + Slope Down)**
-- Characteristics: Sentiment index above 80 but has already shown a turning point
-- Meaning: Stampede warning after market overheat
-- Warning Level: ⚠️⚠️⚠️⚠️ (Very High — core warning scenario of this system)
-- Action: **Reduce positions immediately** — this is the historical high win-rate warning scenario
+**场景3：过度乐观降温状态（绝对高位 + 斜率向下）**
+- 特征：情绪指数在80以上但已出现拐点
+- 含义：市场过热后的踩踏行情预警
+- 预警级别：⚠️⚠️⚠️⚠️（极高，本体系核心预警）
+- 建议：**立即减仓**，这是预警规则的历史高胜率场景
 
-**Scenario 9: Excessively Pessimistic + Cooling (Low Absolute + Slope Down)**
-- Characteristics: Sentiment index below 40 and continuing to decline
-- Meaning: Market entering panic sentiment with rapid downside
-- Warning Level: ⚠️⚠️⚠️ (High)
-- Action: Do not panic-sell; watch for sentiment repair signals
+**场景9：过度悲观降温状态（绝对低位 + 斜率向下）**
+- 特征：情绪指数在40以下且继续下降
+- 含义：市场进入恐慌情绪，伴随快速下行
+- 预警级别：⚠️⚠️⚠️（高）
+- 建议：不恐慌杀跌，关注情绪修复信号
 
-**Scenario 7: Excessively Pessimistic + Warming (Low Absolute + Slope Up)**
-- Characteristics: Sentiment index below 40 but has already shown a turning point
-- Meaning: Local bottom-building and warming phase
-- Warning Level: 🟢 (Opportunity Signal)
-- Action: Gradually build positions; wait for trend confirmation
+**场景7：过度悲观升温状态（绝对低位 + 斜率向上）**
+- 特征：情绪指数在40以下但已出现拐点
+- 含义：局部筑底回暖阶段
+- 预警级别：🟢（机会信号）
+- 建议：逐步布局，等待趋势确认
 
 ---
 
-## 6. Sub-Group Sentiment Coordination Judgement
+## 六、各子类情绪的协同判断
 
-Beyond the composite sentiment index, also monitor divergence across the 6 major factor groups:
+除了综合情绪指数，还应关注6大类子情绪的分化情况：
 
-| Divergence Type | Characteristics | Meaning |
+| 分化类型 | 特征 | 含义 |
 |---|---|---|
-| **Trend-Aligned** | All 6 groups moving in same direction (all high or all low) | Sentiment extreme; high probability of continued directional move |
-| **Divergent** | Some groups high, others low | High market disagreement; high probability of range-bound oscillation |
-| **Leading Divergence** | Fund flow factors (obv/mfi/leverage) diverging from price factors | Warning signal; potential turning point |
-| **Breadth Divergence** | up_number_rate_factor diverging from composite index | Warning signal; rising/falling stock count inconsistent with index |
+| **趋势一致型** | 6大类因子同向（全部高位或全部低位） | 情绪极端，单边行情延续概率高 |
+| **分化型** | 部分因子高位、部分低位 | 市场分歧大，震荡行情概率高 |
+| **领先背离型** | 资金类因子（obv/mfi/leverage）与价格类因子背离 | 预警信号，可能出现拐点 |
+| **广度背离型** | up_number_rate_factor 与综合指数背离 | 预警信号，上涨/下跌家数与指数不一致 |
 
-**Best Long Signal:** Composite sentiment index low + trend factors (e.g. emascore_long_factor, signal_macd_factor) simultaneously issuing golden crosses + fund flow factors starting to rebound
+**最佳做多信号：** 综合情绪指数低位 + 趋势类因子（如emascore_long_factor、signal_macd_factor）同时金叉 + 资金类因子开始回升
 
-**Best Short/Warning Signal:** Composite sentiment index = 100 + turning point appears + multiple fund flow factors (pcr/leverage/turnover) simultaneously at highs
+**最佳做空/预警信号：** 综合情绪指数=100 + 拐点出现 + 多个资金类因子（pcr/leverage/turnover）同时高位
 
 ---
 
-## 7. Historical Typical Scenarios (For Analogizing Current Market)
+## 七、历史典型场景（用于类比当前）
 
-When judging current market status, refer to these historical archetypes:
+当需要判断当前市场状态时，可参考以下历史典型场景：
 
-1. **Sentiment Ice Point Rebound (<20, rising from lows)**: Reference Feb 2020, Apr 2022, Jan 2024
-2. **Sentiment Overheat Warning (=100 + turning point)**: Reference Nov 2017, Dec 2021, Jul 2022, Feb 2023
-3. **Sentiment Mid-Range Oscillation (40-60, direction unclear)**: Reference most of 2019, second half of 2023
-4. **Sentiment Trending Upward (>60, slope up)**: Reference Jan-Apr 2019, Jul-Dec 2020, Sep-Oct 2024
+1. **情绪冰点反弹（<20，低位回升）**：参考2020年2月、2022年4月、2024年1月
+2. **情绪过热预警（=100+拐点）**：参考2017年11月、2021年12月、2022年7月、2023年2月
+3. **情绪中位震荡（40-60，方向不明）**：参考2019年大部分时间、2023年下半年
+4. **情绪趋势上涨（>60，斜率向上）**：参考2019年1-4月、2020年7-12月、2024年9-10月

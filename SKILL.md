@@ -4,19 +4,19 @@ description: |
   OpenClaw Skill for deep analysis of A-share CSI 300 ETF sentiment index indicators. Triggered when user asks about: (1) A-share market sentiment and sentiment index questions; (2) analysis of specific factors (MFI, OBV, MACD, RSI, etc.); (3) historical sentiment index trends, marginal changes, percentile levels; (4) factor logic questions; (5) market condition descriptions; (6) any quantitative indicators or market activity related topics. Provides 14 core factor interpretations, 6 group analyses, composite index levels, marginal change analysis, and warning signal detection.
 ---
 
-# CSI 300 ETF Sentiment Index Analyzer
+# 沪深300ETF情绪指数深度分析工具
 
-## Data File
+## 数据文件
 
-- File: `assets/df_sentiment.xlsx`
-- Range: 2016-01-04 to 2026-04-30 (~2500 trading days)
-- Sheet: Sheet1
+- 文件：`assets/df_sentiment.xlsx`
+- 时间范围：2016-01-04 至 2026-04-30（约2500个交易日）
+- 工作表：Sheet1
 
 ---
 
-## Workflow
+## 工作流程
 
-### Step 1: Load Excel Data
+### 步骤1：加载Excel数据
 
 ```python
 import openpyxl
@@ -24,23 +24,23 @@ wb = openpyxl.load_workbook('assets/df_sentiment.xlsx', data_only=True)
 ws = wb['Sheet1']
 data = list(ws.iter_rows(values_only=True))
 headers = data[0]
-rows = data[1:]        # data rows (sorted by date ascending)
-latest = rows[-1]      # latest trading day
-prev = rows[-2]        # previous trading day (forturning point detection)
+rows = data[1:]        # 数据行（按日期升序排列）
+latest = rows[-1]      # 最新交易日
+prev = rows[-2]        # 前一交易日（用于判断拐点）
 wb.close()
 ```
 
-### Step 2: Identify Question Type
+### 步骤2：识别问题类型
 
-| Type | Example |
-|------|---------|
-| A — Overall Status | "How is today's sentiment index?" / "What is the current market sentiment?" |
-| B — Single Factor Follow-up | "What does XX factor mean?" / "What level is XX factor at recently?" |
-| C — Warning Signal | "Any warning signals now?" / "Has the market topped?" |
-| D — Factor Divergence | "Which factor group is most overheated?" / "Any divergence between factors?" |
-| E — Historical Trend | "How has the sentiment index moved in the past month?" |
+| 类型 | 典型问法 |
+|------|----------|
+| A — 整体状态解读 | "今天情绪指数怎么样？" / "当前市场情绪如何？" |
+| B — 单因子追问 | "XX因子是什么意思？" / "XX因子目前处于什么水平？" |
+| C — 预警信号查询 | "现在有预警信号吗？" / "市场见顶了吗？" |
+| D — 因子分化分析 | "哪类因子最过热？" / "因子之间有没有分化？" |
+| E — 历史走势查询 | "最近一个月情绪指数怎么走的？" |
 
-### Step 3: Calculate Key Indicators
+### 步骤3：计算关键指标
 
 ```python
 def row_to_dict(row):
@@ -51,194 +51,193 @@ pre = row_to_dict(prev)
 
 sentiment_col = headers.index('sentiment_index_avg60_plus')
 
-# Composite sentiment index
+# 综合情绪指数
 sentiment_now = cur['sentiment_index_avg60_plus']
 sentiment_prev = pre['sentiment_index_avg60_plus']
 
-#turning point detection
+# 拐点判断
 is_100 = (sentiment_now == 100)
 is_crossdown = (sentiment_now < sentiment_prev)
 
-# 5-day slope
+# 5日斜率
 vals_all = [r[sentiment_col] for r in rows]
 slope_5 = (vals_all[-1] - vals_all[-6]) / 5
 
-# 6 major factor groups
+# 6大类因子分组
 groups = {
-    'Basic Momentum': ['mfi_factor','leverage_factor','pcr_factor','ar_factor',
-                       'br_factor','RSI_factor','daily_return_factor','equity_bond_effective_factor'],
-    'Trend Strength': ['emascore_long_factor','signal_macd_factor'],
-    'Market Activity': ['turnover_amount_factor'],
-    'Short-term Momentum': ['highlow_factor'],
-    'Fund Flow': ['obv_factor'],
-    'Breadth Consistency': ['up_number_rate_factor'],
+    '市场基础动能': ['mfi_factor','leverage_factor','pcr_factor','ar_factor',
+                   'br_factor','RSI_factor','daily_return_factor','equity_bond_effective_factor'],
+    '市场趋势强度': ['emascore_long_factor','signal_macd_factor'],
+    '市场活跃度': ['turnover_amount_factor'],
+    '短期势能': ['highlow_factor'],
+    '资金流向': ['obv_factor'],
+    '广度一致性': ['up_number_rate_factor'],
 }
 ```
 
 ---
 
-## Output Structure (Important)
+## 输出结构（重要）
 
-### Overall Status (Type A)
+### 整体状态解读（类型A）
 
-Follow this format exactly. **Do not deviate, do not add extra sections.**
+严格按照以下格式输出。**不要偏离，不要自行增加额外章节。**
 
-**Strictly prohibited:** generating "trading suggestions", "key contradictions", "data sources", or any content beyond the structure below.
+**严格禁止：** 生成"操作建议"、"关键矛盾"、"数据来源"或超出以下结构的任何内容。
 
 ```
-【CSI 300 ETF Sentiment Index Overview】
-📅 Data as of: {latest['Times']} (latest trading day with data)
+【沪深300ETF情绪指数概览】
+📅 数据日期：{latest['Times']}（有数据的最新交易日）
 
 ━━━━━━━━━━━━━━━━━━
-📊 Composite Sentiment Index
+📊 综合情绪指数
 ━━━━━━━━━━━━━━━━━━
-Reading: {sentiment_now} / 100
-Level: {level name} ({level explanation})
-
-━━━━━━━━━━━━━━━━━━
-📈 Marginal Change (Slope)
-━━━━━━━━━━━━━━━━━━
-5-day slope: {slope_sign}{slope_value} ({slope meaning})
-vs Yesterday: {up/down} {diff_abs} ({change meaning})
+读数：{sentiment_now} / 100
+档位：{档位名称}（{档位解释}）
 
 ━━━━━━━━━━━━━━━━━━
-🔥 Warning Signal Check
+📈 边际变化（斜率）
 ━━━━━━━━━━━━━━━━━━
-Warning status: {status}
-(Trigger conditions: sentiment index at 100th percentile AND next-day sequential decline.
-Both required: (1) today's reading=100, (2) tomorrow < today.)
-
-{if triggered:
-Trigger reason: sentiment index reading is 100, and higher than yesterday ({sentiment_prev}),
-meaning market sentiment has reached historical extreme overheat. Historically there is an 85.71%
-probability of a >10% drawdown following. Please heed risk.}
-
-{if not triggered:
-Non-trigger reason: current reading {sentiment_now} has not reached the 100th percentile,
-or although at 100 has not yet shown a downward turning point (today={sentiment_now},
-yesterday={sentiment_prev}), meaning current conditions do not meet the system's warning trigger.}
+5日斜率：{斜率符号}{斜率值}（{斜率含义}）
+较昨日：{上升/下降} {diff_abs}（{变化含义}）
 
 ━━━━━━━━━━━━━━━━━━
-📋 6 Major Factor Groups - Percentile Overview
+🔥 预警信号检查
 ━━━━━━━━━━━━━━━━━━
-(Values in parentheses are group means; 0-20=oversold/20-40=below neutral/40-60=neutral/60-80=elevated/80-100=overheated)
+预警状态：{触发/未触发}
+（触发条件：情绪指数达到历史最高分位100 AND 次日环比下降。两个条件同时满足。）
 
-Basic Momentum: mean={momentum_mean} — {overheated/neutral/below} ({one-sentence interpretation})
-  └ Contains: Money Flow (MFI), Leverage, Options PCR, Activity (AR), Buy/Sell (BR), RSI,
-               Daily Return, Equity-Bond Effectiveness — 8 factors
+{如果触发:
+触发原因：情绪指数读数{sencent_prev}，已出现拐点，
+说明市场情绪达到历史极端过热状态。历史统计显示，
+此后85.71%的概率会出现超过10%的回撤。请高度重视风险。}
 
-Trend Strength: mean={trend_mean} — {overheated/neutral/below} ({one-sentence interpretation})
-  └ Contains: EMA Score, MACD Trend Divergence — 2 factors
-
-Market Activity: mean={activity_mean} — {overheated/neutral/below} ({one-sentence interpretation})
-  └ Contains: Turnover & Trading Activity — 1 factor
-
-Short-term Momentum: mean={momentum_st_mean} — {overheated/neutral/below} ({one-sentence interpretation})
-  └ Contains: High-Low Momentum (price high/low slope change) — 1 factor
-
-Fund Flow: mean={flow_mean} — {overheated/neutral/below} ({one-sentence interpretation})
-  └ Contains: On-Balance Volume (OBV, net money flow) — 1 factor
-
-Breadth Consistency: mean={breadth_mean} — {overheated/neutral/below} ({one-sentence interpretation})
-  └ Contains: Market Breadth (up/down stock ratio) — 1 factor
+{如果未触发:
+未触发原因：当前读数{sentiment_now}尚未达到历史最高分位100，
+或者虽然达到100但尚未出现下降拐点（今日={sentiment_now}，
+昨日={sentiment_prev}），不满足系统预警触发条件。}
 
 ━━━━━━━━━━━━━━━━━━
-🔍 Key Factor Tracking
+📋 6大类因子 — 分组百分位一览
 ━━━━━━━━━━━━━━━━━━
-Most overheated: {hot_factor_name} = {hot_factor_value} ({plain explanation})
-Most weak: {weak_factor_name} = {weak_factor_value} ({plain explanation})
+（括号内为分组均值；0-20=过冷/20-40=偏冷/40-60=中性/60-80=偏热/80-100=过热）
 
-Factor divergence: {divergent/consistent} ({divergence note})
+市场基础动能：均值={momentum_mean} — {过热/中性/偏冷}（{一句话解读}）
+  └ 包含：资金流量（MFI）、融资杠杆、期权多空比、人气活跃（AR）、
+         多空买卖意愿（BR）、RSI、日收益率、股债有效性 — 共8个因子
+
+市场趋势强度：均值={trend_mean} — {过热/中性/偏冷}（{一句话解读}）
+  └ 包含：均线突破评分、MACD趋势背离 — 共2个因子
+
+市场活跃度：均值={activity_mean} — {过热/中性/偏冷}（{一句话解读}）
+  └ 包含：成交金额与换手率 — 共1个因子
+
+短期势能：均值={momentum_st_mean} — {过热/中性/偏冷}（{一句话解读}）
+  └ 包含：高低价动量（价格高/低位斜率变化）— 共1个因子
+
+资金流向：均值={flow_mean} — {过热/中性/偏冷}（{一句话解读}）
+  └ 包含：能量潮（OBV，净资金流向）— 共1个因子
+
+广度一致性：均值={breadth_mean} — {过热/中性/偏冷}（{一句话解读}）
+  └ 包含：市场广度（全市场涨跌家数比）— 共1个因子
+
+━━━━━━━━━━━━━━━━━━
+🔍 重点因子追踪
+━━━━━━━━━━━━━━━━━━
+最过热：{hot_factor_name} = {hot_factor_value}（{通俗解释}）
+最偏冷：{weak_factor_name} = {weak_factor_value}（{通俗解释}）
+
+因子分化：{分化/一致}（{分化说明}）
 ```
 
 ---
 
-### Factor Detail (Type B — Single Factor Follow-up)
+### 因子详解（类型B — 单因子追问）
 
-For abstract factors, provide plain-language explanations:
+对于抽象因子，提供通俗语言解释：
 
-**OBV (On-Balance Volume Factor)**:
-> OBV combines volume with price movement. When close > yesterday, add today's volume as positive money flow; when close < yesterday, add as negative flow. OBV shows "where the money flows" — if the index makes a new high but OBV doesn't follow, money is pulling back, which is a warning signal. In this system, obv_factor uses the 90-day historical percentile of OBV change. Higher values indicate stronger medium-term money inflow.
+**OBV（能量潮因子）**：
+> OBV将成交量与价格变动结合。当收盘价高于昨天时，将今日成交量作为正向资金流量累加；低于昨天时作为负向累加。OBV反映"钱流向哪里"——如果指数创新高但OBV没有跟上，说明资金在撤退，是预警信号。本体系中，obv_factor取OBV变化的90日历史百分位。数值越高，说明中期资金流入越强。
 
-**MFI (Money Flow Index Factor)**:
-> MFI is like RSI but incorporates volume. Typical Price = (High + Low + Close) / 3. When typical price rises, multiply by volume = money inflow; when falls = outflow. MFI above 80 means money inflow has reached historical extreme — market may be short-term overheated; below 20 means selling pressure fully released, possibly near a bottom.
+**MFI（资金流量因子）**：
+> MFI类似RSI，但加入了成交量。典型价格 = (最高价+最低价+收盘价)/3。典型价格上涨×成交量=资金流入，下跌×成交量=资金流出。MFI高于80说明资金流入强度达到历史极值，市场可能短期过热；低于20说明卖压充分释放，可能接近底部。
 
-**MACD (Trend Divergence Factor)**:
-> MACD consists of DIF (fast line) and DEA (slow line). MACD histogram = DIF - DEA. When MACD turns from negative to positive and DIF is above zero, short-term upward momentum is strengthening. In this system, signal_macd_factor tracks MACD momentum direction. Higher values mean a healthier uptrend.
+**MACD（趋势背离因子）**：
+> MACD由DIF（快线）和DEA（慢线）组成，MACD柱 = DIF - DEA。当MACD由负转正且DIF在零轴上方时，短期上涨动能在加强。本体系中，signal_macd_factor追踪MACD动量方向。数值越高，说明上涨趋势越健康。
 
-**RSI (Relative Strength Index Factor)**:
-> RSI measures the ratio of sum of up-day gains to sum of down-day losses, reflecting the relative strength of price rises vs. falls. RSI above 70 = overbought (stretched higher), below 30 = oversold. This system uses multi-period RSI fusion to reduce false signals.
+**RSI（相对强弱因子）**：
+> RSI衡量上涨日涨幅之和与下跌日跌幅之和的比值，反映价格涨/跌的相对强度。RSI高于70=超买（涨过头），低于30=超卖。本体系采用多周期RSI融合，减少单周期假信号。
 
-**Equity-Bond Effectiveness Factor**:
-> This factor combines two dimensions: the inverse P/E of CSI 300 (E/P, the "yield" ratio — higher means stocks are cheaper/more attractive vs. bonds) and total market trading volume (more active = more crowded). It subtracts the 5-day MA from the 60-day MA of this combined signal. Smaller values mean more crowding. Values above 80 indicate extreme crowding — one of the most important reversal warning signals.
+**股债有效性因子**：
+> 该因子综合两个维度：沪深300 PE倒数（E/P，"收益率"比——越高说明股票相对债券越便宜/越有吸引力）和全市场成交金额（越活跃=越拥挤）。它用这个合成信号的5日均线减去60日均线。数值越小说明越拥挤。该因子高于80表示极端拥挤——是最重要的反转预警信号之一。
 
-**EMA Score Long Factor**:
-> This factor evaluates the relationship between closing price and multiple moving averages, plus the direction of each MA. Signals include: whether close is above the 30-day MA, whether short-term MAs are above long-term MAs, whether MAs are sloping upward, etc. Higher scores mean more complete MA bullish alignment and stronger trend.
+**均线突破因子**：
+> 该因子评估收盘价与多条均线的位置关系，以及各均线的方向。信号包括：收盘价是否在30日均线上方、短期均线是否在长期均线上方、均线是否向上倾斜等。得分越高，说明均线多头排列越完整，趋势越强。
 
-**High-Low Momentum Factor**:
-> This factor judges momentum direction by comparing the slope of 10-day highs vs. the slope of 10-day lows. In an uptrend, if the high slope exceeds the low slope, buying pressure is strong. In a downtrend, if lows are not making new lows, money is supporting the market. This factor changes quickly — good for capturing short-term momentum shifts.
+**高低价动量因子**：
+> 该因子通过比较10日高价斜率与10日低价斜率来判断动量方向。上涨趋势中，如果高价斜率超过低价斜率，买方力量强；下跌趋势中，如果低价没有创新低，说明资金在托市。该因子变化较快，适合捕捉短期动量切换。
 
 ---
 
-## Factor Name Quick Reference
+## 因子名称速查表
 
-| Excel Column | Name | Group | Plain Explanation |
+| Excel列名 | 名称 | 分组 | 通俗解释 |
 |---|---|---|---|
-| sentiment_index_avg60_plus | Composite Sentiment Index | Final Output | Equal-weighted 6-group fusion percentile |
-| close_price | CSI 300 ETF Close Price | Base Price | Index price, not used in factor calculation |
-| obv_factor | On-Balance Volume | Fund Flow | Where money flows |
-| mfi_factor | Money Flow Index | Basic Momentum | Money inflow intensity |
-| leverage_factor | Leverage Factor | Basic Momentum | How hot leveraged trading is |
-| pcr_factor | Options Put/Call Ratio | Basic Momentum | Hedging demand strength |
-| turnover_amount_factor | Turnover Activity | Market Activity | Market/ETF turnover heat |
-| ar_factor | Activity Ratio | Basic Momentum | Open price position within daily range |
-| br_factor | Buy/Sell Ratio | Basic Momentum | Holders' tolerance for volatility |
-| emascore_long_factor | EMA Score Long | Trend Strength | MA bullish alignment strength |
-| signal_macd_factor | MACD Signal | Trend Strength | MACD momentum direction |
-| highlow_factor | High-Low Momentum | Short-term Momentum | Price high/low slope momentum |
-| RSI_factor | Relative Strength Index | Basic Momentum | Overbought/oversold reference |
-| daily_return_factor | Daily Return | Basic Momentum | Short-term cumulative change |
-| up_number_rate_factor | Market Breadth | Breadth Consistency | Up/down stock ratio across market |
-| equity_bond_effective_factor | Equity-Bond Effectiveness | Basic Momentum | Market crowding level |
+| sentiment_index_avg60_plus | 综合情绪指数 | 最终输出 | 6大类等权融合的百分位 |
+| close_price | 沪深300ETF收盘价 | 基准价格 | 指数价格，不参与因子计算 |
+| obv_factor | 能量潮因子 | 资金流向 | 资金流向哪儿 |
+| mfi_factor | 资金流量因子 | 市场基础动能 | 资金流入强度 |
+| leverage_factor | 融资杠杆因子 | 市场基础动能 | 融资炒股有多热 |
+| pcr_factor | 期权多空因子 | 市场基础动能 | 对冲需求强弱 |
+| turnover_amount_factor | 流动活性因子 | 市场活跃度 | 市场/ETF换手热度 |
+| ar_factor | 人气活跃因子 | 市场基础动能 | 开盘价在日内区间位置 |
+| br_factor | 多空买卖意愿因子 | 市场基础动能 | 持仓者对波动承受力 |
+| emascore_long_factor | 均线突破因子 | 市场趋势强度 | 均线多头排列强度 |
+| signal_macd_factor | MACD信号因子 | 市场趋势强度 | MACD动量方向 |
+| highlow_factor | 高低价动量因子 | 短期势能 | 价格高/低价斜变动量 |
+| RSI_factor | 相对强弱因子 | 市场基础动能 | 超买超卖参考 |
+| daily_return_factor | 日收益率因子 | 市场基础动能 | 短期累计涨跌幅 |
+| up_number_rate_factor | 市场广度因子 | 广度一致性 | 全市场涨跌家数比 |
+| equity_bond_effective_factor | 股债有效性因子 | 市场基础动能 | 市场拥挤程度 |
 
 ---
 
-## 6 Major Factor Groups
+## 6大类因子分组
 
 ```python
-Basic Momentum = [mfi_factor, leverage_factor, pcr_factor, ar_factor,
-                   br_factor, RSI_factor, daily_return_factor, equity_bond_effective_factor]
-Trend Strength = [emascore_long_factor, signal_macd_factor]
-Market Activity = [turnover_amount_factor]
-Short-term Momentum = [highlow_factor]
-Fund Flow = [obv_factor]
-Breadth Consistency = [up_number_rate_factor]
+市场基础动能 = [mfi_factor, leverage_factor, pcr_factor, ar_factor,
+                br_factor, RSI_factor, daily_return_factor, equity_bond_effective_factor]
+市场趋势强度 = [emascore_long_factor, signal_macd_factor]
+市场活跃度 = [turnover_amount_factor]
+短期势能 = [highlow_factor]
+资金流向 = [obv_factor]
+广度一致性 = [up_number_rate_factor]
 ```
 
 ---
 
-## Key Threshold Reference
+## 关键阈值参考
 
-| Factor | Overheated (>) | Oversold (<) | Plain Meaning |
+| 因子 | 过热阈值(>) | 过冷阈值(<) | 通俗含义 |
 |---|---|---|---|
-| mfi_factor | 80 | 20 | Historical extreme inflow / ice point |
-| leverage_factor | 80 | 20 | Hottest / coldest leveraged trading |
-| pcr_factor | 80 | 20 | Extreme / weak hedging demand |
-| ar_factor | 80 | 20 | Persistent daily high / low closes |
-| br_factor | 80 | 20 | Strongest confidence / panic selling |
-| RSI_factor | 80 | 20 | Overbought / oversold |
-| equity_bond_effective_factor | 80 | 20 | Extreme crowding / low crowding + high yield |
-| obv_factor | 80 | 20 | Sustained net inflow / net outflow |
-| emascore_long_factor | 80 | 20 | Perfect MA bullish / bearish alignment |
-| signal_macd_factor | 80 | 20 | MACD strongest / weakest |
-| highlow_factor | 80 | 20 | Strongest momentum / reversal signal |
-| turnover_amount_factor | 80 | 20 | Hottest / coldest trading |
-| up_number_rate_factor | 80 | 20 | Widespread up / down |
-| daily_return_factor | 80 | 20 | Historical high / low short-term gain |
+| mfi_factor | 80 | 20 | 历史极端流入 / 冰点 |
+| leverage_factor | 80 | 20 | 融资最热 / 最冷 |
+| pcr_factor | 80 | 20 | 对冲需求极强 / 极弱 |
+| ar_factor | 80 | 20 | 持续日内高位 / 低位收盘 |
+| br_factor | 80 | 20 | 信心最强 / 恐慌抛售 |
+| RSI_factor | 80 | 20 | 超买 / 超卖 |
+| equity_bond_effective_factor | 80 | 20 | 极端拥挤 / 低拥挤+高赔率 |
+| obv_factor | 80 | 20 | 持续净流入 / 净流出 |
+| emascore_long_factor | 80 | 20 | 完美均线多头 / 空头排列 |
+| signal_macd_factor | 80 | 20 | MACD最强 / 最弱 |
+| highlow_factor | 80 | 20 | 动量最强 / 反转信号 |
+| turnover_amount_factor | 80 | 20 | 成交最热 / 最冷 |
+| up_number_rate_factor | 80 | 20 | 普涨 / 普跌 |
+| daily_return_factor | 80 | 20 | 历史最高 / 最低短期收益 |
 
 ---
 
-## Reference Documents
+## 参考文档
 
-- Factor definitions and logic: `references/factor_definition.md`
-- Warning rules and level interpretation: `references/signal_rules.md`
+- 因子定义与逻辑：`references/factor_definition.md`
+- 预警规则与档位解读：`references/signal_rules.md`
