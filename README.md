@@ -6,7 +6,7 @@ OpenClaw Skill for deep analysis of A-share CSI 300 ETF Sentiment Index indicato
 
 - 14 core sentiment factors real-time interpretation (MFI, OBV, MACD, RSI, leverage funds, options PCR, etc.)
 - 6 major factor group analysis (Basic Momentum / Trend Strength / Market Activity / Short-term Momentum / Fund Flow / Breadth Consistency)
-- Composite sentiment index level判断 (0-100 percentile)
+- Composite sentiment index level determination (0-100 percentile)
 - Warning signal detection (historical win rate 85.71%, drawdown capture rate 100%)
 - Marginal change slope analysis (5-day / 20-day direction)
 - 10-class sentiment scenario matrix interpretation
@@ -47,7 +47,7 @@ openclaw skill install https://github.com/FelixZhao0524/index-sentiment-analyzer
 
 ```
 Composite = (Basic Momentum + Trend Strength + Market Activity + Short-term Momentum + Fund Flow + Breadth Consistency) / 6
-Composite_60d_ma → rolling(60)
+Composite_60d_ma -> rolling(60)
 sentiment_index_avg60_plus = percentile(180d, Composite_60d_ma)
 ```
 
@@ -55,7 +55,7 @@ Value range: 0-100 (percentile vs. last 180 trading days)
 
 ## Warning Signal
 
-- **Trigger**: `sentiment_index_avg60_plus == 100` AND next day环比下降 (turning point)
+- **Trigger**: sentiment_index_avg60_plus == 100 AND next day sequential decline (turning point)
 - **Historical win rate**: 85.71% (6 out of 7 warnings were followed by >10% drawdown)
 - **Avg lead time**: ~19 trading days
 
