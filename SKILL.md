@@ -1,6 +1,7 @@
 ---
 name: index-sentiment-analyzer
-description: A股沪深300 ETF情绪指数深度分析工具。当用户询问以下问题时触发本skill：(1) 关于A股市场情绪、情绪指数、预警信号的问题；(2) 需要分析沪深300ETF的某个因子或多个因子的含义、当前位置、过热/过冷信号；(3) 需要解读情绪指数的历史走势、边际变化、档位含义；(4) 需要了解某个因子背后的逻辑（如MFI、OBV、MACD、RSI等指标在情绪体系中的含义）；(5) 用户提供了一段行情描述，希望判断当前市场情绪状态；(6) 任何与情绪择时、量化指标、市场热门程度相关的问题。本skill提供14个核心情绪因子的详细解读、6大类分组分析、综合情绪指数的档位判断、边际变化分析以及预警信号解读。
+description: |
+  OpenClaw Skill for deep analysis of A-share CSI 300 ETF sentiment index indicators. Triggered when user asks about: (1) A-share market sentiment and sentiment index questions; (2) analysis of specific factors (MFI, OBV, MACD, RSI, etc.); (3) historical sentiment index trends, marginal changes, percentile levels; (4) factor logic questions; (5) market condition descriptions; (6) any quantitative indicators or market activity related topics. Provides 14 core factor interpretations, 6 group analyses, composite index levels, marginal change analysis, and warning signal解读.
 ---
 
 # 情绪指数分析工具
