@@ -26,7 +26,7 @@ data = list(ws.iter_rows(values_only=True))
 headers = data[0]
 rows = data[1:]        # data rows (sorted by date ascending)
 latest = rows[-1]      # latest trading day
-prev = rows[-2]        # previous trading day (for拐点 detection)
+prev = rows[-2]        # previous trading day (forturning point detection)
 wb.close()
 ```
 
@@ -55,7 +55,7 @@ sentiment_col = headers.index('sentiment_index_avg60_plus')
 sentiment_now = cur['sentiment_index_avg60_plus']
 sentiment_prev = pre['sentiment_index_avg60_plus']
 
-#拐点 detection
+#turning point detection
 is_100 = (sentiment_now == 100)
 is_crossdown = (sentiment_now < sentiment_prev)
 

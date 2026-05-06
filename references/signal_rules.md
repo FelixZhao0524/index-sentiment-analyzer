@@ -118,7 +118,7 @@ ema_cross = ema_5 - ema_20
 |---|---|---|---|
 | **Slope Up** | 🟡 Overheat + Warming = Watch for spike-then-pullback | 🟢 Neutral + Warming = Trend improving | 🔵 Oversold + Warming = Bottom rebound opportunity |
 | **Slope Steady** | 🟠 Overheat + Steady = Hold but don't chase | 🟢 Neutral = Normal holding | 🔵 Oversold + Steady = Wait for signal |
-| **Slope Down** | 🔴 Overheat + Cooling = **Warning reduce position** | 🔵 Neutral + Cooling = Cautious观望 | 🔵 Oversold + Cooling = Bottom deepening |
+| **Slope Down** | 🔴 Overheat + Cooling = **Warning reduce position** | 🔵 Neutral + Cooling = Cautiouswait-and-watch | 🔵 Oversold + Cooling = Bottom deepening |
 
 ---
 
