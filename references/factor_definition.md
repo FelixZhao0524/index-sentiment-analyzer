@@ -54,7 +54,7 @@ obv_factor = 180-day percentile rank of obv_change
 **Marginal Change Interpretation:**
 - obv_factor slope turns from negative to positive → Money re-entering, bullish signal
 - obv_factor slope turns from positive to negative → Money accelerating exit, bearish signal
-- obv_factor high-level钝化 then first decline → Warning signal (major players may have already distributed)
+- obv_factor high-level plateau then first decline → Warning signal (major players may have already distributed)
 
 ---
 
@@ -324,7 +324,7 @@ signal_macd_factor = 20-day rolling mean of signal_macd_factor
 **Overheating Signal (signal_macd_factor > 80):**
 - MACD bullish signals strong
 - DIFF continuously expanding above zero line
-- Trend continuity good, but watch for high-level钝化
+- Trend continuity good, but watch for high-level plateau
 
 **Oversold Signal (signal_macd_factor < 20):**
 - MACD bearish signals dominant
@@ -370,12 +370,12 @@ highlow_factor = 180-day percentile rank of highlow_signal
 **Oversold Signal (highlow_factor < 20):**
 - Consecutive 20 days mostly showing weak momentum or reversal characteristics
 - In downtrends: lows continuously making new lows
-- **Opportunity:** After bottom formation, if highlow_factor stabilizes and rebounds, it预示着 reversal
+- **Opportunity:** After bottom formation, if highlow_factor stabilizes and rebounds, it indicates a reversal
 
 **Marginal Change Interpretation:**
 - highlow_factor rising rapidly from lows → Momentum shifting from weak to strong, short-term long signal
 - highlow_factor declining from highs → Short-term momentum fading, may consolidate or pull back
-- highlow_factor first rising after low-level钝化 → Worth watching closely; may be precursor to trend reversal
+- highlow_factor first rising after low-level plateau → Worth watching closely; may be precursor to trend reversal
 
 ---
 
