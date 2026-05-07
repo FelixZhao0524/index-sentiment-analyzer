@@ -1,343 +1,285 @@
-# 沪深300ETF情绪指数深度分析工具
+---
+name: index-sentiment-analyzer
+description: A股沪深300 ETF情绪指数深度分析工具。当用户询问以下问题时触发本skill：(1) 关于A股市场情绪、情绪指数、预警信号的问题；(2) 需要分析沪深300ETF的某个因子或多个因子的含义、当前位置、过热/过冷信号；(3) 需要解读情绪指数的历史走势、边际变化、档位含义；(4) 需要了解某个因子背后的逻辑（如MFI、OBV、MACD、RSI等指标在情绪体系中的含义）；(5) 用户提供了一段行情描述，希望判断当前市场情绪状态；(6) 任何与情绪择时、量化指标、市场热门程度相关的问题；(7) 用户要求更新数据、刷新数据、从GitHub更新数据时。本skill提供14个核心情绪因子的详细解读、6大类分组分析、综合情绪指数的档位判断、边际变化分析以及预警信号解读。
+---
+
+# 情绪指数分析工具
 
 ## 数据文件
 
-- 实时数据：`assets/sentiment_cache.json`（预计算缓存，毫秒级加载，**每次分析优先读此文件**）
-- 原始明细：`assets/df_sentiment.xlsx`（仅查询多日历史走势时才用）
-- 预计算脚本：`scripts/precompute.py`（Excel更新后运行可刷新缓存）
-- 时间范围：2016-01-04 至 2026-04-30（约2500个交易日）
-
-> **性能说明**：从 JSON 缓存读取仅需 <1ms，无需解析 Excel。Excel 仅在查历史走势（Type E）时使用。
->
-> **缓存更新**：Excel 数据更新后，运行 `python3 scripts/precompute.py` 刷新缓存。
+- 文件：`assets/df_sentiment.xlsx`
+- 数据区间：2016-01-04 至 2026-04-30（约2500个交易日）
+- Sheet：Sheet1
+- 截止日期：2026-04-30
 
 ---
 
 ## 工作流程
 
-### 步骤1：加载预计算缓存（毫秒级）
+### Step 0：检查触发类型
+
+| 类型 | 触发关键词 | AI执行动作 |
+|------|-----------|-----------|
+| A-E | 情绪指数/因子/预警/走势等 | 直接进入 Step 1 分析 |
+| **F - 数据更新** | "更新数据""刷新数据""从GitHub更新""更新情绪指数" | **执行 GitHub 数据更新流程（见下方独立说明）** |
+
+---
+
+### 【类型 F：数据更新流程】
+
+当用户请求更新数据时，执行以下步骤：
+
+**F-1. 下载最新 Excel**
+```bash
+github_api="https://api.github.com/repos/FelixZhao0524/index-sentiment-analyzer/contents/assets/df_sentiment.xlsx"
+curl -s "$github_api" | python3 -c "import sys,json,base64; d=json.load(sys.stdin); open('assets/df_sentiment.xlsx','wb').write(base64.b64decode(d['content']))"
+```
+
+**F-2. 运行预计算**
+```python
+import pandas as pd, json, os
+os.chdir('/root/.openclaw/workspace/skills/index-sentiment-analyzer')
+excel_path = 'assets/df_sentiment.xlsx'
+json_path = 'assets/sentiment_cache.json'
+
+df = pd.read_excel(excel_path, engine='openpyxl')
+df = df.sort_values('Times').reset_index(drop=True)
+headers = list(df.columns)
+rows = df.values.tolist()
+latest_row, prev_row = rows[-1], rows[-2]
+
+sentiment_col = headers.index('sentiment_index_avg60_plus')
+vals_all = [r[sentiment_col] for r in rows]
+slope_5 = round((vals_all[-1] - vals_all[-6]) / 5, 3) if len(vals_all) >= 6 else 0
+
+groups = {
+    '市场基础动能': ['mfi_factor','leverage_factor','pcr_factor','ar_factor','br_factor','RSI_factor','daily_return_factor','equity_bond_effective_factor'],
+    '市场趋势强度': ['emascore_long_factor','signal_macd_factor'],
+    '市场活跃度': ['turnover_amount_factor'],
+    '短期势能': ['highlow_factor'],
+    '资金流向': ['obv_factor'],
+    '广度一致性': ['up_number_rate_factor'],
+}
+
+def row_dict(r): return dict(zip(headers, r))
+cur = row_dict(latest_row)
+sentiment_now = cur['sentiment_index_avg60_plus']
+sentiment_prev = row_dict(prev_row)['sentiment_index_avg60_plus']
+
+group_means = {g: round(sum(cur.get(f,0) for f in fs)/len(fs), 1) for g, fs in groups.items()}
+all_factors = sum(groups.values(), [])
+factor_vals = {f: round(cur.get(f, 0), 1) for f in all_factors}
+hot, cold = max(factor_vals, key=factor_vals.get), min(factor_vals, key=factor_vals.get)
+
+output = {
+    'latest_row': latest_row, 'prev_row': prev_row, 'headers': headers,
+    'slope_5': slope_5, 'sentiment_now': round(sentiment_now, 4),
+    'sentiment_prev': round(sentiment_prev, 4), 'group_means': group_means,
+    'hot_factor': hot, 'hot_factor_value': factor_vals[hot],
+    'cold_factor': cold, 'cold_factor_value': factor_vals[cold],
+    'all_factors': factor_vals, 'history_5': rows[-5:], 'history_20': rows[-20:],
+}
+with open(json_path, 'w', encoding='utf-8') as f:
+    json.dump(output, f, ensure_ascii=False, indent=2)
+
+print(f'updated: {latest_row[0]}, sentiment={sentiment_now:.2f}, slope={slope_5:.3f}')
+```
+
+**F-3. 输出确认**
+```
+✅ 数据已更新！
+📅 数据截止：{latest_row[0]}
+📊 情绪指数：{sentiment_now}
+📈 5日斜率：{slope_5}
+
+直接问我「今天情绪指数怎么样」即可获取完整分析。
+```
+
+---
+
+### Step 1：读取 Excel 数据
 
 ```python
-import json
-
-with open('assets/sentiment_cache.json', 'r') as f:
-    cache = json.load(f)
-
-cur  = dict(zip(cache['headers'], cache['latest_row']))
-pre  = dict(zip(cache['headers'], cache['prev_row']))
-
-sentiment_now    = cache['sentiment_now']       # 综合情绪指数
-sentiment_prev   = cache['sentiment_prev']      # 前日综合情绪指数
-slope_5          = cache['slope_5']             # 5日斜率
-group_means      = cache['group_means']         # 6大组均值
-hot_factor       = cache['hot_factor']           # 最热因子名
-hot_factor_value = cache['hot_factor_value']     # 最热因子值
-cold_factor      = cache['cold_factor']          # 最冷因子名
-cold_factor_value= cache['cold_factor_value']    # 最冷因子值
-all_factors      = cache['all_factors']         # 全部14因子 {名:值}
-latest_date      = cur['Times']
+import openpyxl
+wb = openpyxl.load_workbook('assets/df_sentiment.xlsx', data_only=True)
+ws = wb['Sheet1']
+data = list(ws.iter_rows(values_only=True))
+headers = data[0]
+rows = data[1:]        # 数据行（按日期升序）
+latest = rows[-1]     # 最新交易日
+prev = rows[-2]       # 前一交易日（用于判断拐点）
+wb.close()
 ```
 
-### 步骤1b：历史走势查询（慢，仅Type E时使用）
+### Step 2：识别问题类型
+
+| 类型 | 用户问法示例 |
+|---|---|
+| A — 综合状态 | "今天情绪指数怎么样？" / "当前市场情绪如何？" |
+| B — 单因子追问 | "XX因子是什么意思？" / "最近XX因子到哪个档位了？" |
+| C — 预警信号 | "现在有预警信号吗？" / "市场见顶了吗？" |
+| D — 因子分化 | "哪类因子最过热？" / "因子之间有什么分化？" |
+| E — 历史走势 | "最近一个月情绪指数走势如何？" |
+
+### Step 3：计算关键指标
 
 ```python
-import pandas as pd
-df = pd.read_excel('assets/df_sentiment.xlsx', engine='openpyxl')
-df = df.sort_values('Times').tail(30)
-```
+def row_to_dict(row):
+    return dict(zip(headers, row))
 
-### 步骤2：识别问题类型
+cur = row_to_dict(latest)
+pre = row_to_dict(prev)
 
-| 类型 | 典型问法 |
-|------|----------|
-| A — 整体状态解读 | "今天情绪指数怎么样？" / "当前市场情绪如何？" |
-| B — 单因子追问 | "XX因子是什么意思？" / "XX因子目前处于什么水平？" |
-| C — 预警信号查询 | "现在有预警信号吗？" / "市场见顶了吗？" |
-| D — 因子分化分析 | "哪类因子最过热？" / "因子之间有没有分化？" |
-| E — 历史走势查询 | "最近一个月情绪指数怎么走的？" |
+sentiment_col = headers.index('sentiment_index_avg60_plus')
 
----
+# 综合情绪指数
+sentiment_now = cur['sentiment_index_avg60_plus']
+sentiment_prev = pre['sentiment_index_avg60_plus']
 
-## 输出结构（重要）
+# 拐点判断
+is_100 = (sentiment_now == 100)
+is_crossdown = (sentiment_now < sentiment_prev)  # 今日低于昨日
 
-### 整体状态解读（类型A）
+# 5日斜率
+vals_all = [r[sentiment_col] for r in rows]
+slope_5 = (vals_all[-1] - vals_all[-6]) / 5
 
-**严格禁止：** 生成"操作建议"、"关键矛盾"、"数据来源"，或超出以下结构的内容。
-
-**格式规范：**
-- 主标题用 `【】`，章节用 `▎` 开头，章节内用 `·` 列举要点
-- 数字保留小数点后1位，不四舍五入掩饰精度
-- 每节结尾自然收尾，不添加与该节无关的内容
-
-```
-【沪深300ETF情绪指数】
-报告日期：{cur['Times']}
-
-▎一、综合情绪指数
-  当前读数：{sentiment_now:.1f} / 100
-  档位：{level_name}  {level_emoji}
-  市场环境：{market_regime}（{regime_explanation}）
-  较昨日：{↑↓} {abs(sentiment_now - sentiment_prev):.1f}（{change_explanation}）
-
-▎二、边际变化与趋势动能
-  5日斜率：{slope_5:+.2f}（{slope_5_interpretation}）
-  趋势信号：{trend_signal}（{trend_explanation}）
-  EMA5-EMA20：{ema_diff:+.2f}（{ema_cross_signal}）
-
-▎三、预警信号
-  状态：{triggered / not_triggered}
-  {触发: 读数已达历史极值并出现拐点。历史7次预警中6次触发>10%回撤，胜率85.71%，平均提前{lead_days}个交易日预警。}
-  {未触发: 读数{sentiment_now:.1f}，{not_triggered_reason}。}
-
-▎四、六大类因子解读
-  市场基础动能：均值={momentum_mean:.1f} → {level}（{interpretation}）
-    · 最强因子：{最强因子}={值:.1f}　最弱因子：{最弱因子}={值:.1f}
-    · {因子分化描述}
-  市场趋势强度：均值={trend_mean:.1f} → {level}（{interpretation}）
-    · {趋势强度专项解读}
-  市场活跃度：均值={activity_mean:.1f} → {level}（{interpretation}）
-    · {活跃度专项解读}
-  短期势能：均值={momentum_st_mean:.1f} → {level}（{interpretation}）
-    · {短期势能专项解读}
-  资金流向：均值={flow_mean:.1f} → {level}（{interpretation}）
-    · {资金流向专项解读}
-  广度一致性：均值={breadth_mean:.1f} → {level}（{interpretation}）
-    · {广度专项解读}
-
-▎五、重点因子追踪
-  最过热：{hot_factor}={hot_factor_value:.1f} → {hot_interpretation}
-  最偏冷：{cold_factor}={cold_factor_value:.1f} → {cold_interpretation}
-  过热因子数：{n_overheat}个（≥80）  偏冷因子数：{n_cold}个（≤20）
-  分化状态：{divergent / aligned / neutral} — {divergence_explanation}
-
-▎六、综合研判
-  {overall_assessment}
-  {opportunity_or_risk_note}
+# 6大类因子分组
+groups = {
+    '市场基础动能': ['mfi_factor','leverage_factor','pcr_factor','ar_factor',
+                    'br_factor','RSI_factor','daily_return_factor','equity_bond_effective_factor'],
+    '市场趋势强度': ['emascore_long_factor','signal_macd_factor'],
+    '市场活跃度':   ['turnover_amount_factor'],
+    '短期势能':     ['highlow_factor'],
+    '资金流向':     ['obv_factor'],
+    '广度一致性':   ['up_number_rate_factor'],
+}
 ```
 
 ---
 
-## 各节填充规则
+## 输出结构（重点）
 
-### ▎一、综合情绪指数 — 档位与市场环境
+### 综合状态解读（类型 A）
 
-| 读数区间 | 档位 | 市场环境 | 含义 |
-|---|---|---|---|
-| 95-100 | 🔴 历史极值 | 极端亢奋 | 情绪处于历史最强区间，均值回归概率极高，历史上此处几乎必然迎来阶段性回调 |
-| 80-94 | 🟠 过度乐观 | 严重过热 | 情绪显著偏高，赚钱效应扩散，但过热区间往往积累较大回调风险 |
-| 65-79 | 🟡 乐观偏热 | 偏热运行 | 情绪较好但未至极端，多头格局延续，注意边际变化 |
-| 50-64 | 🟢 中性偏暖 | 正常偏多 | 情绪处于历史正常偏暖区间，市场平稳，可中性对待 |
-| 35-49 | 🟢 中性偏冷 | 正常偏弱 | 情绪处于历史正常偏弱区间，市场偏谨慎 |
-| 20-34 | 🔵 悲观偏冷 | 明显冷却 | 情绪较弱，市场参与意愿下降，往往对应调整或筑底阶段 |
-| 5-19 | 🔵 过度悲观 | 接近冰点 | 情绪接近历史冰点，历史上此处多对应重要底部区域 |
-| 0-4 | 🔵 冰点 | 历史极冷 | 情绪创历史新低，恐慌情绪充分释放，历史上一旦出现随后反弹概率极高 |
+按以下格式输出，**直接照写，不要自己发挥、不要添加格式以外的内容**。
 
-**市场环境专项解读填充：**
-- 读数≥80：填"市场情绪极度亢奋，杠杆资金、融资余额、成交量多项指标均处于历史高位，须警惕情绪极值后的均值回归"
-- 读数65-79：填"情绪偏热但未至极端，多头资金仍为主导，可持有但需关注边际拐点信号"
-- 读数50-64：填"情绪中性偏暖，多空力量相对均衡，市场方向不明确，趋势类策略应保持谨慎"
-- 读数35-49：填"情绪中性偏差，市场参与意愿下降，资金入场动力不足，应以防御为主"
-- 读数≤34：填"情绪处于历史偏低水平，市场恐慌情绪蔓延或过度悲观，往往对应布局机会区"
+⚠️ **严格禁止：** 生成"操作建议"、"关键矛盾"、"数据来源"等额外模块，只需按以下格式输出纯客观描述。
 
-**较昨日变化解读：**
-- 上升>5：填"情绪大幅回暖，市场资金快速涌入，短线做多情绪显著升温"
-- 上升1-5：填"情绪稳中向好，做多力量温和增强"
-- 变化±1以内：填"情绪基本平稳，市场无明显方向偏好"
-- 下降1-5：填"情绪有所回落，做多力量略有消退"
-- 下降>5：填"情绪快速降温，市场出现明显恐慌或获利了结迹象"
-
----
-
-### ▎二、边际变化与趋势动能 — 斜率与EMA
-
-**5日斜率填充规则：**
-
-| slope_5 区间 | 解读 |
-|---|---|
-| > +2.5 | 情绪强势升温，市场热情急剧攀升，短线过热风险大 |
-| +1.5 ~ +2.5 | 情绪明显升温，多头力量持续积累，趋势向上概率大 |
-| +0.5 ~ +1.5 | 情绪温和改善，方向偏多但力度不强 |
-| -0.5 ~ +0.5 | 情绪平稳运行，无明确方向，市场处于横盘整理概率大 |
-| -1.5 ~ -0.5 | 情绪温和降温，做多力量逐步消退 |
-| -2.5 ~ -1.5 | 情绪明显降温，空头力量逐步主导 |
-| < -2.5 | 情绪快速退潮，市场出现恐慌或阶段性顶部风险 |
-
-**EMA5-EMA20交叉信号填充：**
-- EMA_diff > +5：填"EMA5上穿EMA20形成金叉，中期趋势由弱转强，做多信号确认"
-- EMA_diff +2 ~ +5：填"EMA5位于EMA20上方且张口扩大，多头格局健康"
-- EMA_diff -2 ~ +2：填"EMA5与EMA20张口极小，中期方向不明，市场等待方向突破"
-- EMA_diff -5 ~ -2：填"EMA5位于EMA20下方且张口扩大，空头格局延续"
-- EMA_diff < -5：填"EMA5下穿EMA20形成死叉，中期趋势由强转弱，清仓信号"
-
-**趋势信号综合判断：**
-- 斜率>0 且 EMA金叉：填"上升趋势确认，做多动能充足"
-- 斜率>0 但 EMA死叉：填"短线情绪回暖但中期趋势仍弱，谨慎做多"
-- 斜率<0 但 EMA金叉：填"中期趋势转强但短线情绪偏弱，底部震荡格局"
-- 斜率<0 且 EMA死叉：填"下降趋势确认，做多动能不足"
-
----
-
-### ▎三、预警信号
-
-**触发条件（必须同时满足）：**
-1. `sentiment_now == 100`（读数达到历史最高分位）
-2. `sentiment_now < sentiment_prev`（次日出现下降拐点）
-
-**触发时填充：**
 ```
-预警触发！综合情绪指数读数{sentiment_now:.1f}，已达历史极值且出现拐点。
-· 历史7次触发记录中，6次在随后约{lead_days}个交易日内出现超过10%回撤
-· 平均最大回撤{-13.77%}，单次最大回撤{-32.46%}（2017年末）
-· 85.71%胜率，历史100%捕捉了所有超过20%的大级别回撤
-· 当前状态：{ hottest_3_factors }等因子均处于高位，市场交易极度拥挤
-建议高度重视风险，密切观察后续演绎。
+【情绪指数综合解读】
+📅 数据截止：{latest['Times']}（最新有数据交易日）
+
+━━━━━━━━━━━━━━━━━━
+📊 综合情绪指数
+━━━━━━━━━━━━━━━━━━
+读数：{sentiment_now} / 100
+档位：{对应档位名称}（{对应档位解释}）
+
+━━━━━━━━━━━━━━━━━━
+📈 边际变化（斜率）
+━━━━━━━━━━━━━━━━━━
+5日斜率：{slope_5符号}{slope_5数值}（{斜率含义}）
+与昨日比较：{升/降} {diff绝对值}（{变化含义}）
+
+━━━━━━━━━━━━━━━━━━
+🔥 预警信号判断
+━━━━━━━━━━━━━━━━━━
+预警状态：{预警状态说明}
+（预警触发条件：情绪指数达到100分位 + 次日出现向下拐点。
+即同时满足：①今日读数=100，②明日低于今日。）
+
+{如果触发预警：
+触发原因：情绪指数读数为100，且高于昨日({sentiment_prev})，
+说明市场情绪已达到历史极端过热水平，历史上有85.71%的概率
+在随后出现超过10%的回撤，请注意风险。}
+{如果未触发：
+未触发原因：当前读数{sentiment_now}未达到100分位，
+或虽为100但尚未出现向下拐点（今日={sentiment_now}，
+昨日={sentiment_prev}），说明当前未达到本体系的预警触发条件。}
+
+━━━━━━━━━━━━━━━━━━
+📋 6大类情绪分位一览
+━━━━━━━━━━━━━━━━━━
+（括号内为该类因子当前均值，数值含义：0-20过低/20-40偏低/40-60中性/60-80偏高/80-100过热）
+
+市场基础动能：均值={动能均值} — {过热/中性/偏低}（{一句话解读}）
+  └ 包含：资金流量(MFI)、融资杠杆、期权PCR、人气AR、多空BR、RSI、
+          日收益率、广义拥挤度等8个因子
+
+市场趋势强度：均值={趋势均值} — {过热/中性/偏低}（{一句话解读}）
+  └ 包含：均线突破因子(EMA Score)、MACD趋势背离因子，共2个因子
+
+市场活跃度：  均值={活跃均值} — {过热/中性/偏低}（{一句话解读}）
+  └ 包含：成交额与换手率综合因子(turnover_amount)，共1个因子
+
+短期势能：    均值={势能均值} — {过热/中性/偏低}（{一句话解读}）
+  └ 包含：上涨势能因子(highlow)，衡量价格高/低点斜率变化，共1个因子
+
+资金流向：    均值={资金均值} — {过热/中性/偏低}（{一句话解读}）
+  └ 包含：能量潮因子(OBV)，衡量资金净流入/净流出，共1个因子
+
+广度一致性：  均值={广度均值} — {过热/中性/偏低}（{一句话解读}）
+  └ 包含：市场广度因子(up_number_rate)，追踪全市场个股涨跌比例，共1个因子
+
+━━━━━━━━━━━━━━━━━━
+🔍 重点因子追踪
+━━━━━━━━━━━━━━━━━━
+最过热因子：{过热因子名} = {过热因子值}（{因子通俗解释}）
+最疲弱因子：{疲弱因子名} = {疲弱因子值}（{因子通俗解释}）
+
+因子分化情况：{分化/一致}（{分化说明}）
 ```
 
-**未触发时填充（逐条判断）：**
-- sentiment_now < 90：填"读数尚未进入过热区间（<90），预警条件未满足"
-- sentiment_now >= 90 且 sentiment_now > sentiment_prev：填"读数虽处于历史高位（{sentiment_now:.1f}），但尚未出现拐点（今日继续上升），预警需等拐点出现"
-- sentiment_now == 100 且 sentiment_now <= sentiment_prev：填"读数达到极值但尚未下降，预警需等下降拐点确认"
-
 ---
 
-### ▎四、六大类因子解读 — 深度填充规则
+### 因子详细介绍（类型 B — 单因子追问）
 
-**分组均值→档位：**
-| 区间 | 档位 |
-|---|---|
-| ≥80 | 🔥过热 |
-| 65-79 | 🟡偏热 |
-| 40-64 | 🟢中性 |
-| 20-39 | 🔵偏冷 |
-| <20 | 🔵过冷 |
-
-**市场基础动能（均值=X）：**
-- X≥65：`综合动能偏强，MFI/leverage/RSI等主要动能因子处于历史偏高位置，融资余额、资金流量等指标显示市场做多力量充沛，趋势类策略胜率较高`
-- X≤40：`综合动能偏差，动能因子处于历史偏低区间，MFI/RSI等显示市场动量不足，趋势方向不明，做多应谨慎`
-- 40<X<65：`综合动能中性，各动能因子分化，多空信号均有，建议等待方向明确`
-
-**市场趋势强度（均值=X）：**
-- X≥65：`趋势强度偏高，均线系统（MA5/10/20/60/120）多头排列完整，MACD DIF持续位于零轴上方，趋势类指标共振向上，做多胜率高`
-- X≤40：`趋势强度偏低，均线呈空头或混乱排列，MACD DIF运行于零轴下方，趋势方向向下，做多胜率低，应以防守为主`
-- 40<X<65：`趋势强度中性，均线张口收窄，MACD零轴附近运行，趋势方向不明朗，需等待突破确认`
-
-**市场活跃度（均值=X）：**
-- X≥65：`成交极度活跃，换手率处于历史高位，市场参与热情高涨，趋势延续性较强；但需警惕拥挤交易风险`
-- X≤40：`成交冷清，换手率处于历史低位，市场参与意愿降至冰点，往往对应底部区间或调整尾声`
-- 40<X<65：`成交活跃度正常，市场无明显异常`
-
-**短期势能（均值=X）：**
-- X≥65：`短期动量偏强，10日高价斜率持续领先于低价斜率，买方力量主导，短线继续冲高概率大`
-- X≤40：`短期动量偏差，高价斜率收缩或低价斜率扩大，说明上涨动量衰竭或底部酝酿中，趋势反转风险`
-- 40<X<65：`短期动量中性，高低价斜率基本平衡，方向不明`
-
-**资金流向（均值=X）：**
-- X≥65：`资金持续净流入，OBV中期趋势向上，主力资金积极布局，中期方向偏多`
-- X≤40：`资金持续净流出，OBV中期趋势向下，主力撤退明显，中期方向偏空`
-- 40<X<65：`资金面平衡，无明显方向`
-
-**广度一致性（均值=X）：**
-- X≥65：`全市场上涨家数占比远超下跌家数，个股呈现普涨格局，情绪蔓延健康，趋势延续概率大；但一致性过高后一旦反转易出现踩踏`
-- X≤40：`全市场下跌家数占优，广度收窄，个股分化严重，指数可能存在虚高成分，上涨趋势的健康性存疑`
-- 40<X<65：`涨跌家数基本平衡，广度中性`
-
----
-
-### ▎五、重点因子追踪
-
-**过热因子金融含义（≥80逐条填写，≤20逐条填写）：**
-
-| 因子 | ≥80 解读 | ≤20 解读 |
-|---|---|---|
-| mfi_factor | MFI资金流量达历史极值，买盘极度旺盛，短期过热 | MFI资金流出压力充分释放，往往对应阶段性底部 |
-| leverage_factor | 融资杠杆资金大规模入场，市场亢奋，警惕平仓踩踏 | 融资客大规模撤退，市场情绪极度悲观，往往是底部信号 |
-| pcr_factor | 期权看跌持仓远超看涨，对冲需求激增，市场谨慎 | 期权看涨远超看跌，市场过度乐观，反转风险累积 |
-| ar_factor | 持续收于日内高点，买方力量极强，狂热追涨 | 持续收于日内低点，卖方主导，往往对应恐慌底 |
-| br_factor | 资金高位仍强势承接，持仓信心强，警惕动能衰减 | 恐慌抛压充分释放，情绪修复窗口打开 |
-| RSI_factor | RSI处历史高位，超买明显，短期回调压力 | RSI处历史低位，超卖明显，布局机会区 |
-| equity_bond_effective_factor | 拥挤度达极端高位（数值越小越拥挤），市场最危险信号 | 拥挤度极低+高赔率，历史较好布局区间 |
-| obv_factor | OBV持续净流入，主力资金强势介入 | OBV持续净流出，主力撤退明显 |
-| emascore_long_factor | 均线完美多头排列，趋势向上，做多信号 | 均线空头排列，趋势向下 |
-| signal_macd_factor | MACD多头信号强，上涨趋势健康 | MACD空头主导，趋势向下 |
-| highlow_factor | 高低价动量极强，上涨趋势加速 | 动量衰竭，趋势可能反转 |
-| turnover_amount_factor | 成交极度活跃，投机情绪亢奋 | 成交极度萎缩，市场冷清，往往是底部 |
-| up_number_rate_factor | 普涨格局，情绪高度一致，注意踩踏风险 | 普跌格局，恐慌主导，冰点后往往反弹 |
-| daily_return_factor | 短期累计收益达历史高位，获利回吐压力大 | 短期累计跌幅达历史低位，超跌反弹概率大 |
-
-**分化判断规则：**
-- 过热因子≥3个 且 偏冷因子≥3个 → 分化：填"过热与偏冷因子同时并存，市场内部矛盾明显，多空力量激烈博弈，趋势行情难以延续，震荡格局概率大"
-- 过热因子≥4个 且 偏冷因子≤1个 → 一致偏热：填"多数因子处于偏热状态，市场情绪共振向上，趋势延续概率高；但局部已现过热信号，需关注高位分化"
-- 偏冷因子≥4个 且 过热因子≤1个 → 一致偏冷：填"多数因子处于偏冷状态，市场情绪集体衰退，往往对应调整或筑底阶段；低位反转信号需等待确认"
-- 过热因子≤1个 且 偏冷因子≤1个 → 中性：填"各因子均处于中性区间，市场无明确方向偏好，趋势类策略胜率有限"
-
----
-
-### ▎六、综合研判
-
-根据综合读数、各组分化状态、趋势方向，给出综合性文字研判：
-
-**模板逻辑：**
-```
-综合读数{sentiment_now:.1f}（{档位}），{trend_assessment}。
-{各组分化总述}。
-{因子极值提示}。
-{机会/风险总评}。
-```
-
-**机会/风险总评填充：**
-- sentiment_now ≥ 80：填"当前市场情绪处于历史高位，回调风险大于上涨空间，高位追涨风险极大，应以防御和减仓为主，切勿盲目追多"
-- sentiment_now 65-79：填"情绪偏热但未至极端，可继续持有已有仓位，但不宜新开重仓；密切观察斜率和资金类因子方向"
-- sentiment_now 50-64：填"情绪中性，市场方向不明，保持现有仓位，不宜激进加仓；等待明确方向信号"
-- sentiment_now 35-49：填"情绪偏差，市场参与意愿不足，控制仓位为主；但部分因子已处低位，可关注修复机会"
-- sentiment_now ≤ 34：填"情绪处于历史偏低水平，市场恐慌蔓延；但历史数据显示，此处往往对应重要底部区域，进一步杀跌风险大，可逐步关注左侧布局机会"
-
----
-
-## 因子详解（类型B — 单因子追问）
+对于抽象因子，给出如下**通俗解释**：
 
 **OBV（能量潮因子）**：
-> OBV将成交量与价格变动结合。当收盘价高于昨天时，将今日成交量作为正向资金流量累加；低于昨天时作为负向累加。OBV反映"钱流向哪里"——如果指数创新高但OBV没有跟上，说明资金在撤退，是预警信号。本体系中，obv_factor取OBV变化的90日历史百分位。数值越高，说明中期资金流入越强。
+> OBV 将成交量与价格变动结合。当收盘价高于昨日时，把当日成交量累加为正向资金流入；低于昨日时则累加为负向资金流出。OBV 反映的是"钱"往哪里流——如果指数创新高但 OBV 没有跟上，说明资金在撤退，这是预警信号。本体系的 obv_factor 取 OBV 90日变化量的历史分位，数值越高说明中期资金流入越强劲。
 
 **MFI（资金流量因子）**：
-> MFI类似RSI，但加入了成交量。典型价格 = (最高价+最低价+收盘价)/3。典型价格上涨×成交量=资金流入，下跌×成交量=资金流出。MFI高于80说明资金流入强度达到历史极值，市场可能短期过热；低于20说明卖压充分释放，可能接近底部。
+> MFI 类似 RSI，但把成交量考虑进来。典型价格 =（最高+最低+收盘）/3，当典型价格上涨时乘以当日成交量视为资金流入，下跌时视为流出。MFI 超过80意味着资金流入强度达到历史极值，市场可能短期过热；低于20说明资金流出压力充分释放，可能接近底部。
 
 **MACD（趋势背离因子）**：
-> MACD由DIF（快线）和DEA（慢线）组成，MACD柱 = DIF - DEA。当MACD由负转正且DIF在零轴上方时，短期上涨动能在加强。本体系中，signal_macd_factor追踪MACD动量方向。数值越高，说明上涨趋势越健康。
+> MACD 由 DIF（快线）和 DEA（慢线）的差值构成。DIF 与 DEA 的差值即为 MACD 柱。当 MACD 由负转正且 DIF 在零轴上方，说明短期上涨动量正在加强。本体系的 signal_macd_factor 追踪 MACD 动量方向，数值越高说明上涨趋势越健康。
 
 **RSI（相对强弱因子）**：
-> RSI衡量上涨日涨幅之和与下跌日跌幅之和的比值，反映价格涨/跌的相对强度。RSI高于70=超买（涨过头），低于30=超卖。本体系采用多周期RSI融合，减少单周期假信号。
+> RSI 衡量上涨日涨幅之和与下跌日跌幅之和的比值，反映价格上涨下跌的相对力度。RSI 超过70视为超买（涨过头），低于30视为超卖（跌过头）。本体系使用多周期 RSI 融合，减少假信号。
 
-**股债有效性因子**：
-> 该因子综合两个维度：沪深300 PE倒数（E/P，"收益率"比——越高说明股票相对债券越便宜/越有吸引力）和全市场成交金额（越活跃=越拥挤）。它用这个合成信号的5日均线减去60日均线。数值越小说明越拥挤。该因子高于80表示极端拥挤——是最重要的反转预警信号之一。
+**广义拥挤度因子（equity_bond_effective_factor）**：
+> 这个因子综合考虑两个维度：沪深300市盈率的倒数（PE的倒数=赔率，越高说明股票相对债券越便宜/有吸引力）和全市场成交金额（越活跃说明市场越拥挤）。两者相减后取5日与60日均值之差——差值越小说明市场越拥挤。数值越高（80以上）说明拥挤度极高，是最重要的反转预警信号之一。
 
-**均线突破因子**：
-> 该因子评估收盘价与多条均线的位置关系，以及各均线的方向。信号包括：收盘价是否在30日均线上方、短期均线是否在长期均线上方、均线是否向上倾斜等。得分越高，说明均线多头排列越完整，趋势越强。
+**均线突破因子（emascore_long_factor）**：
+> 该因子综合评估收盘价与多条均线的位置关系，以及各均线自身的方向。信号包括：收盘价是否在30日均线上方、各短期均线是否在长期均线上方、均线是否向上倾斜等。得分越高说明均线多头排列越完整，趋势越强。
 
-**高低价动量因子**：
-> 该因子通过比较10日高价斜率与10日低价斜率来判断动量方向。上涨趋势中，如果高价斜率超过低价斜率，买方力量强；下跌趋势中，如果低价没有创新低，说明资金在托市。该因子变化较快，适合捕捉短期动量切换。
+**上涨势能因子（highlow_factor）**：
+> 通过比较最近10个交易日的最高价斜率和最低价斜率判断动量方向。上涨行情中，如果最高价上涨斜率大于最低价，说明做多力量强；下跌行情中，如果最低价没有创新低，说明有资金在托底。该因子变化较快，适合捕捉短期动量转换。
 
 ---
 
-## 因子名称速查表
+## 各因子中文名速查
 
-| Excel列名 | 名称 | 分组 | 通俗解释 |
+| Excel列名 | 中文名 | 大类 | 通俗一句话 |
 |---|---|---|---|
-| sentiment_index_avg60_plus | 综合情绪指数 | 最终输出 | 6大类等权融合的百分位 |
-| close_price | 沪深300ETF收盘价 | 基准价格 | 指数价格，不参与因子计算 |
-| obv_factor | 能量潮因子 | 资金流向 | 资金流向哪儿 |
+| sentiment_index_avg60_plus | **情绪指数（综合）** | 最终输出 | 6大类因子的等权融合分位 |
+| close_price | 沪深300ETF收盘价 | 基础价格 | 指数价格，不参与因子计算 |
+| obv_factor | 能量潮因子 | 资金流向 | 钱往哪里流 |
 | mfi_factor | 资金流量因子 | 市场基础动能 | 资金流入强度 |
-| leverage_factor | 融资杠杆因子 | 市场基础动能 | 融资炒股有多热 |
-| pcr_factor | 期权多空因子 | 市场基础动能 | 对冲需求强弱 |
-| turnover_amount_factor | 流动活性因子 | 市场活跃度 | 市场/ETF换手热度 |
-| ar_factor | 人气活跃因子 | 市场基础动能 | 开盘价在日内区间位置 |
-| br_factor | 多空买卖意愿因子 | 市场基础动能 | 持仓者对波动承受力 |
+| leverage_factor | 融资杠杆因子 | 市场基础动能 | 借钱买股票的热度 |
+| pcr_factor | 期权多空因子 | 市场基础动能 | 投资者对冲需求强弱 |
+| turnover_amount_factor | 流动活性因子 | 市场活跃度 | 市场和股票换手热度 |
+| ar_factor | 人气活跃因子 | 市场基础动能 | 开盘价相对日内高低的位置 |
+| br_factor | 多空买卖意愿因子 | 市场基础动能 | 持仓者对波动的耐受信心 |
 | emascore_long_factor | 均线突破因子 | 市场趋势强度 | 均线多头排列强度 |
-| signal_macd_factor | MACD信号因子 | 市场趋势强度 | MACD动量方向 |
-| highlow_factor | 高低价动量因子 | 短期势能 | 价格高/低价斜变动量 |
+| signal_macd_factor | 趋势背离因子 | 市场趋势强度 | MACD动量方向 |
+| highlow_factor | 上涨势能因子 | 短期势能 | 价格高低点斜率动量 |
 | RSI_factor | 相对强弱因子 | 市场基础动能 | 超买超卖参考 |
-| daily_return_factor | 日收益率因子 | 市场基础动能 | 短期累计涨跌幅 |
-| up_number_rate_factor | 市场广度因子 | 广度一致性 | 全市场涨跌家数比 |
-| equity_bond_effective_factor | 股债有效性因子 | 市场基础动能 | 市场拥挤程度 |
+| daily_return_factor | 日收益率因子 | 市场基础动能 | 短期累计涨跌 |
+| up_number_rate_factor | 市场广度因子 | 广度一致性 | 全市场个股涨跌比例 |
+| equity_bond_effective_factor | 广义拥挤度因子 | 市场基础动能 | 市场交易拥挤程度 |
 
 ---
 
@@ -347,36 +289,36 @@ df = df.sort_values('Times').tail(30)
 市场基础动能 = [mfi_factor, leverage_factor, pcr_factor, ar_factor,
                 br_factor, RSI_factor, daily_return_factor, equity_bond_effective_factor]
 市场趋势强度 = [emascore_long_factor, signal_macd_factor]
-市场活跃度 = [turnover_amount_factor]
-短期势能 = [highlow_factor]
-资金流向 = [obv_factor]
-广度一致性 = [up_number_rate_factor]
+市场活跃度   = [turnover_amount_factor]
+短期势能     = [highlow_factor]
+资金流向     = [obv_factor]
+广度一致性   = [up_number_rate_factor]
 ```
 
 ---
 
-## 关键阈值参考
+## 关键阈值速查
 
-| 因子 | 过热阈值(>) | 过冷阈值(<) | 通俗含义 |
+| 因子 | 过热(>) | 过冷(<) | 通俗理解 |
 |---|---|---|---|
-| mfi_factor | 80 | 20 | 历史极端流入 / 冰点 |
-| leverage_factor | 80 | 20 | 融资最热 / 最冷 |
-| pcr_factor | 80 | 20 | 对冲需求极强 / 极弱 |
-| ar_factor | 80 | 20 | 持续日内高位 / 低位收盘 |
-| br_factor | 80 | 20 | 信心最强 / 恐慌抛售 |
-| RSI_factor | 80 | 20 | 超买 / 超卖 |
-| equity_bond_effective_factor | 80 | 20 | 极端拥挤 / 低拥挤+高赔率 |
-| obv_factor | 80 | 20 | 持续净流入 / 净流出 |
-| emascore_long_factor | 80 | 20 | 完美均线多头 / 空头排列 |
-| signal_macd_factor | 80 | 20 | MACD最强 / 最弱 |
-| highlow_factor | 80 | 20 | 动量最强 / 反转信号 |
-| turnover_amount_factor | 80 | 20 | 成交最热 / 最冷 |
-| up_number_rate_factor | 80 | 20 | 普涨 / 普跌 |
-| daily_return_factor | 80 | 20 | 历史最高 / 最低短期收益 |
+| mfi_factor | 80 | 20 | 资金流入历史极值/冰点 |
+| leverage_factor | 80 | 20 | 借钱炒股最热/最冷时刻 |
+| pcr_factor | 80 | 20 | 对冲需求极强/极弱 |
+| ar_factor | 80 | 20 | 持续收在日内高点/低点 |
+| br_factor | 80 | 20 | 持筹信心最强/恐慌抛售 |
+| RSI_factor | 80 | 20 | 超买/超卖 |
+| equity_bond_effective_factor | 80 | 20 | 极度拥挤/低拥挤+高赔率 |
+| obv_factor | 80 | 20 | 资金持续净流入/净流出 |
+| emascore_long_factor | 80 | 20 | 均线完全多头/空头 |
+| signal_macd_factor | 80 | 20 | MACD极强/极弱 |
+| highlow_factor | 80 | 20 | 动量最强/反转信号 |
+| turnover_amount_factor | 80 | 20 | 交易最热/最冷清 |
+| up_number_rate_factor | 80 | 20 | 个股普涨/普跌 |
+| daily_return_factor | 80 | 20 | 短期涨幅历史高位/低位 |
 
 ---
 
 ## 参考文档
 
-- 因子定义与逻辑：`references/factor_definition.md`
+- 因子深度定义与逻辑：`references/factor_definition.md`
 - 预警规则与档位解读：`references/signal_rules.md`
