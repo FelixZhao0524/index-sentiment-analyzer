@@ -6,7 +6,25 @@
 import pandas as pd
 import json
 import sys
+import re
 from pathlib import Path
+
+def make_serializable(obj):
+    """将numpy类型转换为原生Python类型"""
+    import numpy as np
+    if isinstance(obj, dict):
+        return {k: make_serializable(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [make_serializable(v) for v in obj]
+    elif isinstance(obj, (np.integer,)):
+        return int(obj)
+    elif isinstance(obj, (np.floating,)):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif hasattr(obj, 'item'):
+        return obj.item()
+    return obj
 
 def precompute(excel_path=None, json_path=None):
     excel_path = excel_path or "assets/df_sentiment.xlsx"
@@ -57,20 +75,20 @@ def precompute(excel_path=None, json_path=None):
     history_20 = rows[-20:]
 
     output = {
-        "latest_row": latest_row,
-        "prev_row": prev_row,
+        "latest_row": make_serializable(latest_row),
+        "prev_row": make_serializable(prev_row),
         "headers": headers,
         "slope_5": slope_5,
-        "sentiment_now": round(sentiment_now, 4),
-        "sentiment_prev": round(sentiment_prev, 4),
+        "sentiment_now": round(float(sentiment_now), 4),
+        "sentiment_prev": round(float(sentiment_prev), 4),
         "group_means": group_means,
         "hot_factor": hot_factor,
         "hot_factor_value": factor_vals[hot_factor],
         "cold_factor": cold_factor,
         "cold_factor_value": factor_vals[cold_factor],
         "all_factors": factor_vals,
-        "history_5": history_5,
-        "history_20": history_20,
+        "history_5": make_serializable(history_5),
+        "history_20": make_serializable(history_20),
     }
 
     with open(json_path, "w", encoding="utf-8") as f:
