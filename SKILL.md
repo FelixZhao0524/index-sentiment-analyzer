@@ -16,49 +16,96 @@ spreadsheet_token: J2yUsT52RhOCdEtiVQKchkiin3f
 range: Sheet1!A2490:T2510
 ```
 
-### 第二步：更新本地缓存 Excel
+返回结果是一个二维数组，第一行是表头，后续是数据行。
 
-用 `pandas` 将返回的最新行追加到 `assets/df_sentiment.xlsx`：
+### 第二步：保存到本地 Excel
+
+用 Python 将最新行追加到 `assets/df_sentiment.xlsx`：
 
 ```python
 import pandas as pd
 from openpyxl import load_workbook
 
-df_cache = pd.read_excel('assets/df_sentiment.xlsx', engine='openpyxl')
-new_rows = pd.DataFrame([...], columns=df_cache.columns)
+# 1. 读取返回数据（rows = 返回的二维数组，跳过表头行）
+#    找到最新一行的 Times 列值
+new_times = rows[-1][0]  # 表头第0列是 Times
 
-# 去重：Times 已存在则跳过
-for _, row in new_rows.iterrows():
-    if row['Times'] not in df_cache['Times'].values:
-        df_cache = pd.concat([df_cache, pd.DataFrame([row])], ignore_index=True)
+# 2. 读取本地缓存（如果不存在则创建）
+try:
+    df_cache = pd.read_excel('assets/df_sentiment.xlsx', engine='openpyxl')
+except:
+    # 第一次：读取全量飞书数据并保存
+    all_rows = feishu_sheet读取全量(Spreadsheet_token, range='Sheet1!A1:T2510')
+    df_cache = pd.DataFrame(all_rows[1:], columns=all_rows[0])
+    df_cache.to_excel('assets/df_sentiment.xlsx', index=False)
+
+# 3. 追加最新行（去重）
+for row in rows[1:]:  # 跳过表头
+    times_val = row[0]
+    if times_val not in df_cache['Times'].values:
+        df_cache = pd.concat([df_cache, pd.DataFrame([row], columns=df_cache.columns)], ignore_index=True)
 
 df_cache.to_excel('assets/df_sentiment.xlsx', index=False)
 ```
 
-**如果 `assets/df_sentiment.xlsx` 不存在**，则改用全量读取：
-
-```
-range: Sheet1!A1:T2510
-```
-
-读取后保存为 `assets/df_sentiment.xlsx`，之后都用增量追加逻辑。
-
 ### 第三步：从本地 Excel 读取数据
 
 ```python
+import pandas as pd
 df = pd.read_excel('assets/df_sentiment.xlsx', engine='openpyxl')
 df = df.sort_values('Times').reset_index(drop=True)
 当日 = df.iloc[-1]
 前日 = df.iloc[-2]
+
+sentiment_now  = 当日['sentiment_index_avg60_plus']
+sentiment_prev = 前日['sentiment_index_avg60_plus']
+change         = sentiment_now - sentiment_prev
 ```
 
 ### 第四步：输出分析报告
 
-从当日行读取 `sentiment_index_avg60_plus` 及 14 个因子值，直接输出报告，**不生成任何文件**。
+直接输出文字报告，**不生成任何文件**。
 
 ---
 
-## 输出格式（严格按此结构）
+## 14个因子含义
+
+| 因子 | 列名 | 通俗含义 | 高值（≥80） | 低值（≤20） |
+|------|------|----------|------------|------------|
+| 能量潮 | `obv_factor` | 钱往哪里流 | 主力净流入 | 主力净流出 |
+| 资金流量 | `mfi_factor` | 买盘有多旺 | 资金流入极强 | 卖压充分释放 |
+| 融资杠杆 | `leverage_factor` | 杠杆资金有多热 | 杠杆资金大规模入场 | 融资客撤退 |
+| 期权多空 | `pcr_factor` | 对冲需求有多强 | 看跌期权远超看涨 | 看涨远超看跌 |
+| 换手热度 | `turnover_amount_factor` | 市场换手热度 | 成交极度活跃 | 成交极度萎缩 |
+| 人气因子 | `ar_factor` | 收盘在日内高位还是低位 | 收于日内高点 | 收于日内低点 |
+| 买卖意愿 | `br_factor` | 持仓者信心强弱 | 高位强势承接 | 恐慌抛压释放 |
+| 均线多头 | `emascore_long_factor` | 均线多头排列强度 | 多头向上 | 空头向下 |
+| MACD动量 | `signal_macd_factor` | MACD动量方向 | 多头信号强 | 空头主导 |
+| 高低价动量 | `highlow_factor` | 高低价斜率谁更强 | 买方主导 | 动量衰竭 |
+| 相对强弱 | `RSI_factor` | 超买超卖 | 超买明显 | 超卖明显 |
+| 日收益率 | `daily_return_factor` | 短期累计涨跌 | 涨幅历史高位 | 跌幅历史低位 |
+| 市场广度 | `up_number_rate_factor` | 全市场涨跌家数比 | 普涨注意踩踏 | 普跌恐慌主导 |
+| 广义拥挤度 | `equity_bond_effective_factor` | 市场拥挤程度 | 极度拥挤，最危险反转 | 低拥挤高赔率 |
+
+---
+
+## 核心因子深入理解
+
+**ar_factor（人气因子）：**
+AR衡量最近一段时间里收盘价落在日内波动区间的相对位置。AR极低（≤20）说明沪深300持续收于日内低点——指数本身可能没跌多少，但买家每天都不愿意在日内高位接单，做多人气涣散，是短期人气涣散的明确信号。这类信号往往出现在下跌尾声或横盘磨底阶段。
+
+**equity_bond_effective_factor（广义拥挤度）：**
+这是整个体系里最有预警价值的反转因子。它综合了"赔率"（沪深300 PE的倒数）和"热度"（全市场成交金额）两个维度。读数高（≥80）意味着赔率低但成交活跃，是最危险的组合——历史上每次此处往往伴随重要顶部。
+
+**leverage_factor（融资杠杆）：**
+杠杆资金是市场里最敏感的一群人，借来的钱有成本必须快速获利。读数高（≥80）说明融资客大规模入场，市场亢奋，但一旦反转平仓踩踏会更剧烈。
+
+**pcr_factor（期权多空因子）：**
+PCR高（看跌期权远超看涨期权）反而是市场短期高点的预警——因为大量持有看跌期权的往往是对冲基金在"买保险"，当他们普遍感到需要保险时往往是市场最脆弱的时刻。
+
+---
+
+## 输出格式
 
 ```
 【沪深300ETF情绪指数】
@@ -109,34 +156,17 @@ df = df.sort_values('Times').reset_index(drop=True)
 
 ---
 
-## 14个因子通俗参考
+## 预警信号
 
-| 因子 | 通俗含义 | 高值（≥80） | 低值（≤20） |
-|------|----------|------------|------------|
-| obv_factor | 钱往哪里流 | 主力净流入 | 主力净流出 |
-| mfi_factor | 买盘有多旺 | 资金流入极强 | 卖压充分释放 |
-| leverage_factor | 融资杠杆有多热 | 杠杆资金大规模入场 | 融资客撤退 |
-| pcr_factor | 对冲需求有多强 | 看跌期权远超看涨 | 看涨远超看跌 |
-| turnover_amount_factor | 市场换手热度 | 成交极度活跃 | 成交极度萎缩 |
-| ar_factor | 收盘在日内高位还是低位 | 收于日内高点 | 收于日内低点 |
-| br_factor | 持仓者信心强弱 | 高位强势承接 | 恐慌抛压释放 |
-| RSI_factor | 超买超卖 | 超买明显 | 超卖明显 |
-| daily_return_factor | 短期累计涨跌 | 涨幅历史高位 | 跌幅历史低位 |
-| equity_bond_effective_factor | 市场拥挤程度 | 极度拥挤，最危险反转信号 | 低拥挤高赔率 |
-| emascore_long_factor | 均线多头排列强度 | 多头向上 | 空头向下 |
-| signal_macd_factor | MACD动量方向 | 多头信号强 | 空头主导 |
-| highlow_factor | 高低价斜率谁更强 | 买方主导 | 动量衰竭 |
-| up_number_rate_factor | 全市场涨跌家数比 | 普涨注意踩踏 | 普跌恐慌主导 |
+**触发条件：** `sentiment_now >= 99` AND `sentiment_now < sentiment_prev`
 
----
+**触发时：**
+历史7次触发中6次在随后约20个交易日内出现超过10%回撤，平均最大回撤-13.77%，单次最大-32.46%（2017年末）。
 
-## 重点因子写法参考
-
-**ar_factor = 10（人气因子极低）：**
-> AR衡量最近收盘价落在日内区间的相对位置。AR极低说明沪深300持续收于日内低点，买家不愿在高位接单，做多人气涣散，常出现在下跌尾声或横盘磨底阶段。
-
-**equity_bond_effective_factor = 95（拥挤度极高）：**
-> 衡量市场拥挤程度——读数95意味着赔率低但参与者众多，历史上每次此处往往伴随重要顶部。低赔率+高成交是最危险的反转信号。
+**未触发时：**
+- 读数 < 90：尚未进入过热区间，预警条件未满足
+- 读数 ≥ 90 但仍在上升：处于历史高位，需等拐点
+- 读数 ≥ 99 但未下降：需等待下降拐点确认
 
 ---
 
@@ -144,4 +174,9 @@ df = df.sort_values('Times').reset_index(drop=True)
 
 模板：`综合读数{sentiment_now:.0f}（{档位}），{定性}。{最大亮点或风险}。{总体评价}。`
 
-档位基调：≥80防御为主 / 65-79观察拐点 / 50-64等待信号 / 35-49控制仓位 / ≤34关注左侧机会
+档位基调：
+- ≥80：高位，回调风险大于上涨空间
+- 65–79：偏热，可持有但不宜重仓
+- 50–64：中性，方向不明
+- 35–49：偏冷，控制仓位
+- ≤34：历史低位，关注左侧机会
