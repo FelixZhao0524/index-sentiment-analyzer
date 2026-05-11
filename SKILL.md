@@ -4,11 +4,19 @@
 
 ---
 
-## 分析流程（按顺序执行，不得跳过或添加步骤）
+## 分析流程（按顺序执行）
 
-### 第一步：读取数据（只做一次）
+### 第一步：检查本地缓存
 
-调用 `feishu_sheet`：
+检查文件 `assets/df_sentiment.xlsx` 是否存在且包含最新交易日期的数据。
+
+- 如果文件存在，取其中最后一行的 Times 列值
+- 如果最后一行的日期等于飞书表格当前最新日期 → 直接用本地数据，跳过第二步
+- 否则 → 执行第二步
+
+### 第二步：读取飞书数据并更新本地缓存
+
+**2.1 调用 feishu_sheet（只读最后20行）：**
 
 ```
 action: read
@@ -16,58 +24,46 @@ spreadsheet_token: J2yUsT52RhOCdEtiVQKchkiin3f
 range: Sheet1!A2490:T2510
 ```
 
-### 第二步：找到当日和前日数据
+**2.2 将最新行追加到本地 Excel：**
 
-返回结果是一个二维数组（第一行是表头）。
+用 `openpyxl` 打开 `assets/df_sentiment.xlsx`，找到最后一行，在其下方追加新行。
 
-- `当日 = rows[-1]`（最后一行的日期列就是最新交易日期）
-- `前日 = rows[-2]`
-- `sentiment_now = 当日行中 sentiment_index_avg60_plus 列的值`
-- `sentiment_prev = 前日行中 sentiment_index_avg60_plus 列的值`
+- 如果最新行的 Times 值已存在于文件中（防止重复追加），跳过追加
+- 追加后保存文件
+
+### 第三步：读取数据（从本地 Excel）
+
+用 `pandas` 读取 `assets/df_sentiment.xlsx`：
+
+```python
+import pandas as pd
+df = pd.read_excel('assets/df_sentiment.xlsx', engine='openpyxl')
+df = df.sort_values('Times').reset_index(drop=True)
+当日 = df.iloc[-1]
+前日 = df.iloc[-2]
+```
+
+### 第四步：提取数据
+
+从当日行读取：
+- `sentiment_now = 当日['sentiment_index_avg60_plus']`
+- `sentiment_prev = 前日['sentiment_index_avg60_plus']`
 - `change = sentiment_now - sentiment_prev`
-
-### 第三步：读取14个因子值
-
-从**当日行**中读取以下14个因子值（直接取数值，不需要任何计算）：
-
-| 因子名（列头） | 说明 |
-|---|---|
-| sentiment_index_avg60_plus | 综合情绪指数 |
-| obv_factor | 能量潮因子 |
-| mfi_factor | 资金流量因子 |
-| leverage_factor | 融资杠杆因子 |
-| pcr_factor | 期权多空因子 |
-| turnover_amount_factor | 流动活性因子 |
-| ar_factor | 人气因子 |
-| br_factor | 买卖意愿因子 |
-| emascore_long_factor | 均线多头因子 |
-| signal_macd_factor | MACD动量因子 |
-| highlow_factor | 高低价动量因子 |
-| RSI_factor | 相对强弱因子 |
-| daily_return_factor | 日收益率因子 |
-| up_number_rate_factor | 市场广度因子 |
-| equity_bond_effective_factor | 广义拥挤度因子 |
-
-### 第四步：判断预警
-
-- **触发条件**：`sentiment_now >= 99` AND `sentiment_now < sentiment_prev`
-- 触发时：输出「预警触发！……」并输出详细历史数据
-- 未触发时：输出「未触发」，根据读数说明原因
+- 14个因子值直接从当日的各列读取
 
 ### 第五步：输出分析报告
 
 **严格禁止：**
+- 多次调用 feishu_sheet（每天只调一次）
 - 运行任何 Python 脚本（precompute.py 等）
-- 读写任何文件（.json / .md / .xlsx）
+- 生成或保存 .json / .md 分析文件
 - 调用 akshare 或其他数据源
-- 生成或保存任何文件
-- 调用 skill 的 references 文件
 
-**输出格式（严格按此结构，不得超出）：**
+**输出格式（严格按此结构）：**
 
 ```
 【沪深300ETF情绪指数】
-报告日期：{当日行 Times 列}
+报告日期：{当日['Times']}
 
 ▎一、综合情绪指数
   当前读数：{sentiment_now:.1f} / 100
@@ -79,7 +75,7 @@ range: Sheet1!A2490:T2510
   {描述}
 
 ▎三、重点因子解读
-  {从14个因子中选3-5个最有解释力的，结合通俗含义+当前数值+市场含义，写出有判断的段落}
+  {选3-5个最有解释力的因子，结合通俗含义+当前数值+市场含义，写出有判断的段落}
 
 ▎四、综合研判
   {综合读数+因子极值，给出有观点的结论}
@@ -114,52 +110,39 @@ range: Sheet1!A2490:T2510
 
 ---
 
-## 因子通俗含义参考
+## 14个因子快速参考
 
-| 因子 | 通俗解释 | 高值（≥80） | 低值（≤20） |
-|------|----------|------------|------------|
-| obv_factor | 钱往哪里流 | 主力净流入 | 主力净流出 |
-| mfi_factor | 买盘有多旺 | 资金流入极强 | 卖压充分释放 |
-| leverage_factor | 融资杠杆有多热 | 杠杆资金大规模入场 | 融资客撤退 |
-| pcr_factor | 对冲需求有多强 | 看跌期权远超看涨 | 看涨远超看跌 |
-| turnover_amount_factor | 市场换手热度 | 成交极度活跃 | 成交极度萎缩 |
-| ar_factor | 收盘在日内高位还是低位 | 收于日内高点 | 收于日内低点 |
-| br_factor | 持仓者信心强弱 | 高位强势承接 | 恐慌抛压释放 |
-| RSI_factor | 超买超卖 | 超买明显 | 超卖明显 |
-| daily_return_factor | 短期累计涨跌 | 涨幅历史高位 | 跌幅历史低位 |
-| equity_bond_effective_factor | 市场拥挤程度 | 极度拥挤，最危险反转信号 | 低拥挤高赔率 |
-| emascore_long_factor | 均线多头排列强度 | 多头排列向上 | 空头排列向下 |
-| signal_macd_factor | MACD动量方向 | 多头信号强 | 空头主导 |
-| highlow_factor | 高低价斜率谁更强 | 买方主导 | 动量衰竭 |
-| up_number_rate_factor | 全市场涨跌家数比 | 普涨注意踩踏 | 普跌恐慌主导 |
+| 因子 | 高值（≥80） | 低值（≤20） |
+|------|------------|------------|
+| obv_factor（钱往哪里流） | 主力净流入 | 主力净流出 |
+| mfi_factor（买盘有多旺） | 资金流入极强 | 卖压充分释放 |
+| leverage_factor（融资杠杆） | 杠杆资金大规模入场 | 融资客撤退 |
+| pcr_factor（对冲需求） | 看跌期权远超看涨 | 看涨远超看跌 |
+| turnover_amount_factor（换手热度） | 成交极度活跃 | 成交极度萎缩 |
+| ar_factor（收盘位置） | 收于日内高点 | 收于日内低点 |
+| br_factor（持仓信心） | 高位强势承接 | 恐慌抛压释放 |
+| RSI_factor（超买超卖） | 超买明显 | 超卖明显 |
+| daily_return_factor（短期涨跌） | 涨幅历史高位 | 跌幅历史低位 |
+| equity_bond_effective_factor（拥挤度） | 极度拥挤 | 低拥挤高赔率 |
+| emascore_long_factor（均线多头） | 多头向上 | 空头向下 |
+| signal_macd_factor（MACD动量） | 多头信号强 | 空头主导 |
+| highlow_factor（高低价斜率） | 买方主导 | 动量衰竭 |
+| up_number_rate_factor（涨跌家数比） | 普涨注意踩踏 | 普跌恐慌主导 |
 
 ---
 
 ## 重点因子写法示例
 
-**ar_factor = 10（人气因子极低）：**
-> AR衡量最近一段时间收盘价落在日内波动区间的相对位置。AR=10处于历史极低区间，意味着沪深300持续收于日内低点——指数本身跌幅可能有限，但每天都是低收盘，说明买家不愿在日内高位接单，做多人气涣散。这类信号往往出现在下跌尾声或横盘磨底阶段。
+**ar_factor 极低：**
+> AR衡量最近收盘价落在日内区间的相对位置。AR极低说明沪深300持续收于日内低点，买家不愿在日内高位接单，做多人气涣散，常出现在下跌尾声或磨底阶段。
 
-**equity_bond_effective_factor = 95（拥挤度极高）：**
-> 这个因子衡量市场拥挤程度——读数95意味着赔率低但参与者众多，历史上市场上每次该因子触及极端区间往往伴随重要顶部。当前沪深300 PE相对较高（低赔率）而全市场成交依然活跃，是明确的预警信号。
-
-**leverage_factor = 85（融资杠杆过热）：**
-> 融资买入金额反映杠杆资金的做多意愿。当前读数85说明杠杆资金大规模入场，市场亢奋。但杠杆资金是有成本的，一旦市场转向，平仓踩踏会更剧烈。历史上融资情绪极端高涨时往往对应市场阶段性顶部。
+**equity_bond_effective_factor 极高：**
+> 衡量市场拥挤程度——读数极高意味着赔率低但参与者众，历史上每次此处往往伴随重要顶部。当前低赔率+高成交是最危险的反转信号。
 
 ---
 
 ## 综合研判写法
 
-**模板：**
-```
-综合读数{sentiment_now:.0f}（{档位}），{一句话定性}。
-{最大亮点或最大风险}。
-{总体评价}。
-```
+模板：`综合读数{sentiment_now:.0f}（{档位}），{一句话定性}。{最大风险或亮点}。{总体评价}。`
 
-**档位基调：**
-- ≥80：高位，回调风险大于上涨空间
-- 65–79：偏热，可持有但不宜重仓
-- 50–64：中性，方向不明
-- 35–49：偏冷，控制仓位
-- ≤34：历史低位，关注左侧机会
+档位基调：≥80防御为主 / 65-79观察拐点 / 50-64等待信号 / 35-49控制仓位 / ≤34关注左侧机会
