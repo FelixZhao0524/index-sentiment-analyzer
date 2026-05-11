@@ -25,6 +25,9 @@ def precompute(df, json_path=None):
     json_path = json_path or "assets/sentiment_cache.json"
     headers = list(df.columns)
     rows = df.values.tolist()
+    if len(rows) < 2:
+        print(f"[ERROR] 数据行不足2行，当前仅{len(rows)}行")
+        return
     latest_row = rows[-1]
     prev_row = rows[-2]
 
