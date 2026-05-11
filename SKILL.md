@@ -6,63 +6,48 @@
 
 ## 分析流程
 
-### 第一步：读取飞书数据
+### 第一步：下载最新数据
 
-调用 `feishu_sheet`（只读最后 20 行，速度快）：
+用 Python 从 GitHub 下载 Excel 文件（通过 GitHub API + base64 解码）：
 
+```python
+import urllib.request, json, base64, os
+
+REPO = "FelixZhao0524/index-sentiment-analyzer"
+LOCAL_FILE = "assets/df_sentiment.xlsx"
+
+os.makedirs("assets", exist_ok=True)
+
+req = urllib.request.Request(
+    f"https://api.github.com/repos/{REPO}/contents/assets/df_sentiment.xlsx?ref=main"
+)
+with urllib.request.urlopen(req) as r:
+    d = json.loads(r.read())
+
+raw = base64.b64decode(d["content"])
+with open(LOCAL_FILE, "wb") as f:
+    f.write(raw)
+print(f"Downloaded: {len(raw)/1024:.0f} KB")
 ```
-action: read
-spreadsheet_token: J2yUsT52RhOCdEtiVQKchkiin3f
-range: Sheet1!A2490:T2510
-```
 
-返回结果是一个二维数组，第一行是表头，后续是数据行。
-
-### 第二步：保存到本地 Excel
-
-用 Python 将最新行追加到 `assets/df_sentiment.xlsx`：
+### 第二步：读取数据
 
 ```python
 import pandas as pd
-from openpyxl import load_workbook
 
-# 1. 读取返回数据（rows = 返回的二维数组，跳过表头行）
-#    找到最新一行的 Times 列值
-new_times = rows[-1][0]  # 表头第0列是 Times
+df = pd.read_excel("assets/df_sentiment.xlsx", engine="openpyxl")
+df = df[df["Times"].notna()]
+df = df.sort_values("Times").reset_index(drop=True)
 
-# 2. 读取本地缓存（如果不存在则创建）
-try:
-    df_cache = pd.read_excel('assets/df_sentiment.xlsx', engine='openpyxl')
-except:
-    # 第一次：读取全量飞书数据并保存
-    all_rows = feishu_sheet读取全量(Spreadsheet_token, range='Sheet1!A1:T2510')
-    df_cache = pd.DataFrame(all_rows[1:], columns=all_rows[0])
-    df_cache.to_excel('assets/df_sentiment.xlsx', index=False)
-
-# 3. 追加最新行（去重）
-for row in rows[1:]:  # 跳过表头
-    times_val = row[0]
-    if times_val not in df_cache['Times'].values:
-        df_cache = pd.concat([df_cache, pd.DataFrame([row], columns=df_cache.columns)], ignore_index=True)
-
-df_cache.to_excel('assets/df_sentiment.xlsx', index=False)
-```
-
-### 第三步：从本地 Excel 读取数据
-
-```python
-import pandas as pd
-df = pd.read_excel('assets/df_sentiment.xlsx', engine='openpyxl')
-df = df.sort_values('Times').reset_index(drop=True)
 当日 = df.iloc[-1]
 前日 = df.iloc[-2]
 
-sentiment_now  = 当日['sentiment_index_avg60_plus']
-sentiment_prev = 前日['sentiment_index_avg60_plus']
+sentiment_now  = 当日["sentiment_index_avg60_plus"]
+sentiment_prev = 前日["sentiment_index_avg60_plus"]
 change         = sentiment_now - sentiment_prev
 ```
 
-### 第四步：输出分析报告
+### 第三步：输出分析报告
 
 直接输出文字报告，**不生成任何文件**。
 
