@@ -6,18 +6,56 @@
 
 ## 分析流程
 
-### 第一步：下载最新数据
+### 第一步：检查本地缓存（当天数据）
 
-用 Python 从 GitHub 下载 Excel 文件（通过 GitHub API + base64 解码）：
+先用 Python 检查本地是否有当天的缓存：
+
+```python
+import os, json
+from datetime import date
+
+cache_dir = "assets"
+today = date.today().isoformat()
+
+# 检查当天缓存
+cache_file = os.path.join(cache_dir, "sentiment_cache.json")
+excel_file = os.path.join(cache_dir, "df_sentiment.xlsx")
+```
+
+**如果同时满足以下条件，直接读取本地缓存，跳过第二步：**
+1. `sentiment_cache.json` 存在
+2. `df_sentiment.xlsx` 存在
+3. Excel 文件的修改时间 >= 今天 00:00（即当天下载的）
+
+```python
+import datetime
+if os.path.exists(cache_file) and os.path.exists(excel_file):
+    mtime = datetime.datetime.fromtimestamp(os.path.getmtime(excel_file))
+    if mtime.date() >= today:
+        # 当天已缓存，直接用
+        with open(cache_file) as f:
+            cache = json.load(f)
+        print(f"使用本地缓存，日期: {mtime.date()}")
+        # 跳过下载，直接分析
+```
+
+---
+
+### 第二步：从 GitHub 下载最新 Excel
+
+当天第一次分析时，从 GitHub 下载最新数据：
 
 ```python
 import urllib.request, json, base64, os
+from datetime import date
 
 REPO = "FelixZhao0524/index-sentiment-analyzer"
 LOCAL_FILE = "assets/df_sentiment.xlsx"
+CACHE_FILE = "assets/sentiment_cache.json"
 
 os.makedirs("assets", exist_ok=True)
 
+# 1. 下载 Excel
 req = urllib.request.Request(
     f"https://api.github.com/repos/{REPO}/contents/assets/df_sentiment.xlsx?ref=main"
 )
@@ -28,9 +66,19 @@ raw = base64.b64decode(d["content"])
 with open(LOCAL_FILE, "wb") as f:
     f.write(raw)
 print(f"Downloaded: {len(raw)/1024:.0f} KB")
+
+# 2. 运行预计算生成缓存
+import subprocess
+result = subprocess.run(
+    ["python3", "scripts/precompute.py", "--local", LOCAL_FILE],
+    capture_output=True, text=True
+)
+print(result.stdout)
 ```
 
-### 第二步：读取数据
+---
+
+### 第三步：读取数据
 
 ```python
 import pandas as pd
@@ -47,7 +95,9 @@ sentiment_prev = 前日["sentiment_index_avg60_plus"]
 change         = sentiment_now - sentiment_prev
 ```
 
-### 第三步：输出分析报告
+---
+
+### 第四步：输出分析报告
 
 直接输出文字报告，**不生成任何文件**。
 
