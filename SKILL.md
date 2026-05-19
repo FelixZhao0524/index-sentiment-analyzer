@@ -59,18 +59,28 @@ if os.path.exists(cache_file) and os.path.exists(excel_file):
 ### 第二步：从 GitHub 下载最新 Excel（无缓存时）
 
 ```python
-import urllib.request, json, base64, os
-from datetime import date
+import urllib.request, json, base64, os, ssl
+import sys
 
 REPO = "FelixZhao0524/index-sentiment-analyzer"
 LOCAL_FILE = "assets/df_sentiment.xlsx"
 os.makedirs("assets", exist_ok=True)
 
+# 跨平台 SSL 上下文（Windows + Anaconda 兼容）
+try:
+    import certifi
+    ssl_context = ssl.create_default_context(cafile=certifi.where())
+except Exception:
+    ssl_context = ssl.create_default_context()
+    ssl_context.check_hostname = False
+    ssl_context.verify_mode = ssl.CERT_NONE
+
 # 1. 下载 Excel
-req = urllib.request.Request(
-    f"https://api.github.com/repos/{REPO}/contents/assets/df_sentiment.xlsx?ref=main"
-)
-with urllib.request.urlopen(req) as r:
+url = f"https://api.github.com/repos/{REPO}/contents/assets/df_sentiment.xlsx?ref=main"
+req = urllib.request.Request(url)
+req.add_header("Accept", "application/vnd.github.v3+json")
+req.add_header("Authorization", "token YOUR_GITHUB_TOKEN")
+with urllib.request.urlopen(req, context=ssl_context) as r:
     d = json.loads(r.read())
 
 raw = base64.b64decode(d["content"])
@@ -79,16 +89,18 @@ with open(LOCAL_FILE, "wb") as f:
 print(f"下载完成: {len(raw)/1024:.0f} KB")
 
 # 2. 运行预计算生成缓存
+PY = sys.executable  # 自动适配 Windows (python) / Linux (python3)
 import subprocess
 result = subprocess.run(
-    ["python3", "scripts/precompute.py", "--local", LOCAL_FILE],
+    [PY, "scripts/precompute.py", "--local", LOCAL_FILE],
     capture_output=True, text=True
 )
 print(result.stdout)
 ```
 
-> ⚠️ 所有 Python 命令需在 skill 目录下执行：
-> `cd /root/.openclaw/workspace/skills/index-sentiment-analyzer && python3 scripts/precompute.py --local assets/df_sentiment.xlsx`
+> ⚠️ 所有 Python 命令均使用 `sys.executable` 自动适配平台（Windows → `python`，Linux/macOS → `python3`），无需手动修改。
+> ⚠️ 若出现 SSL 证书错误（Windows + Anaconda 环境），运行 `conda install ca-certificates` 或安装 `certifi` 包。
+> ⚠️ 所有 Python 命令需在 skill 目录下执行。
 
 ---
 
@@ -263,6 +275,7 @@ change         = sentiment_now - sentiment_prev
 
 - **GitHub 下载失败** → 若本地缓存存在且有效，读取本地缓存；否则返回「今日数据暂不可用，请稍后重试」
 - **本地缓存不存在且下载失败** → 打印错误原因，终止分析并提示用户
+- **SSL 证书验证错误（Windows + Anaconda 环境）** → 备用方案：临时跳过 SSL 验证（`ssl_context.verify_mode = ssl.CERT_NONE`），同时提示用户运行 `conda install ca-certificates` 或 `pip install certifi`
 - **Excel 解析失败** → 打印原始错误，终止分析
 - **数据行不足2行** → 打印 `[ERROR] 数据行不足2行`，终止分析
 - **缺少必要字段** → 打印缺失的字段名，终止分析
