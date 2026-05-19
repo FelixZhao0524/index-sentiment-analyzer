@@ -3,7 +3,6 @@
 预计算情绪指数缓存（手动工具）
 
 当用户明确说「更新数据」时，由人工触发此脚本。
-日常分析不需要运行此脚本，分析时直接读取飞书云表格即可。
 
 用法：
   python3 scripts/precompute.py --local assets/df_sentiment.xlsx
@@ -15,19 +14,23 @@ import json
 import argparse
 from pathlib import Path
 
+
 def load_from_excel(excel_path):
     df = pd.read_excel(excel_path, engine="openpyxl")
     df = df[df["Times"].notna() & (df["Times"] != "")]
     df = df.sort_values("Times").reset_index(drop=True)
     return df
 
+
 def precompute(df, json_path=None):
     json_path = json_path or "assets/sentiment_cache.json"
     headers = list(df.columns)
     rows = df.values.tolist()
+
     if len(rows) < 2:
         print(f"[ERROR] 数据行不足2行，当前仅{len(rows)}行")
         return
+
     latest_row = rows[-1]
     prev_row = rows[-2]
 
@@ -35,22 +38,29 @@ def precompute(df, json_path=None):
     pre = dict(zip(headers, prev_row))
 
     all_factors_list = [
-        "obv_factor","mfi_factor","leverage_factor","pcr_factor",
-        "turnover_amount_factor","ar_factor","br_factor",
-        "emascore_long_factor","signal_macd_factor","highlow_factor",
-        "RSI_factor","daily_return_factor","up_number_rate_factor",
+        "obv_factor", "mfi_factor", "leverage_factor", "pcr_factor",
+        "turnover_amount_factor", "ar_factor", "br_factor",
+        "emascore_long_factor", "signal_macd_factor", "highlow_factor",
+        "RSI_factor", "daily_return_factor", "up_number_rate_factor",
         "equity_bond_effective_factor",
     ]
     factor_vals = {f: round(float(cur.get(f, 0) or 0), 1) for f in all_factors_list}
     hot_factor = max(factor_vals, key=factor_vals.get)
     cold_factor = min(factor_vals, key=factor_vals.get)
 
+    # 近5日 / 近20日 sentiment 序列（用于 Word 报告趋势图）
+    sentiment_col = "sentiment_index_avg60_plus"
+    history_5 = [round(float(r[headers.index(sentiment_col)]), 2) for r in rows[-5:]]
+    history_20 = [round(float(r[headers.index(sentiment_col)]), 2) for r in rows[-20:]]
+    dates_5 = [str(r[headers.index("Times")])[:10] for r in rows[-5:]]
+    dates_20 = [str(r[headers.index("Times")])[:10] for r in rows[-20:]]
+
     output = {
         "headers": headers,
         "latest_row": latest_row,
         "prev_row": prev_row,
-        "sentiment_now": round(float(cur["sentiment_index_avg60_plus"]), 4),
-        "sentiment_prev": round(float(pre["sentiment_index_avg60_plus"]), 4),
+        "sentiment_now": round(float(cur[sentiment_col]), 4),
+        "sentiment_prev": round(float(pre[sentiment_col]), 4),
         "hot_factor": hot_factor,
         "hot_factor_value": factor_vals[hot_factor],
         "cold_factor": cold_factor,
@@ -58,8 +68,8 @@ def precompute(df, json_path=None):
         "all_factors": factor_vals,
         "overheat_factors": {k: v for k, v in factor_vals.items() if v >= 80},
         "cold_factors": {k: v for k, v in factor_vals.items() if v <= 20},
-        "history_5": rows[-5:],
-        "history_20": rows[-20:],
+        "history_5": [{"date": d, "sentiment": s} for d, s in zip(dates_5, history_5)],
+        "history_20": [{"date": d, "sentiment": s} for d, s in zip(dates_20, history_20)],
     }
 
     Path(json_path).parent.mkdir(parents=True, exist_ok=True)
@@ -70,6 +80,7 @@ def precompute(df, json_path=None):
     print(f"     sentiment_now={output['sentiment_now']:.2f}")
     print(f"     hot={hot_factor}({factor_vals[hot_factor]:.0f})  cold={cold_factor}({factor_vals[cold_factor]:.0f})")
     return output
+
 
 if __name__ == "__main__":
     import os
