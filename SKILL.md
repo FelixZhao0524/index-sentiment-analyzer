@@ -59,7 +59,7 @@ if os.path.exists(cache_file) and os.path.exists(excel_file):
 ### 第二步：从 GitHub 下载最新 Excel（无缓存时）
 
 ```python
-import urllib.request, json, base64, os, ssl
+import urllib.request, os, ssl
 import sys
 
 REPO = "FelixZhao0524/index-sentiment-analyzer"
@@ -75,21 +75,18 @@ except Exception:
     ssl_context.check_hostname = False
     ssl_context.verify_mode = ssl.CERT_NONE
 
-# 1. 下载 Excel
-url = f"https://api.github.com/repos/{REPO}/contents/assets/df_sentiment.xlsx?ref=main"
-req = urllib.request.Request(url)
-req.add_header("Accept", "application/vnd.github.v3+json")
-req.add_header("Authorization", "token YOUR_GITHUB_TOKEN")
+# 下载 Excel（公开仓库，无需 Token）
+raw_url = f"https://raw.githubusercontent.com/{REPO}/main/assets/df_sentiment.xlsx"
+req = urllib.request.Request(raw_url)
 with urllib.request.urlopen(req, context=ssl_context) as r:
-    d = json.loads(r.read())
+    raw = r.read()
 
-raw = base64.b64decode(d["content"])
 with open(LOCAL_FILE, "wb") as f:
     f.write(raw)
 print(f"下载完成: {len(raw)/1024:.0f} KB")
 
-# 2. 运行预计算生成缓存
-PY = sys.executable  # 自动适配 Windows (python) / Linux (python3)
+# 运行预计算生成缓存
+PY = sys.executable
 import subprocess
 result = subprocess.run(
     [PY, "scripts/precompute.py", "--local", LOCAL_FILE],
@@ -98,8 +95,8 @@ result = subprocess.run(
 print(result.stdout)
 ```
 
-> ⚠️ 所有 Python 命令均使用 `sys.executable` 自动适配平台（Windows → `python`，Linux/macOS → `python3`），无需手动修改。
-> ⚠️ 若出现 SSL 证书错误（Windows + Anaconda 环境），运行 `conda install ca-certificates` 或安装 `certifi` 包。
+> ⚠️ 公开仓库无需 Token，任何用户安装后可直接使用。
+> ⚠️ 若出现 SSL 证书错误（Windows + Anaconda 环境），运行 `conda install ca-certificates` 或 `pip install certifi`。
 > ⚠️ 所有 Python 命令需在 skill 目录下执行。
 
 ---
