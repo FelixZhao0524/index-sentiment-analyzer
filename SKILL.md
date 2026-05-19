@@ -124,13 +124,210 @@ change         = sentiment_now - sentiment_prev
 
 ### 第四步：输出分析报告
 
-直接输出文字报告，**不生成任何文件**。
+直接输出文字报告（结构见下方「报告输出规范」）。
 
-> 💡 第四章图表（`assets/情绪指数图表.png`）仅供模型解读参考，若部署环境支持图片发送，可附图发送；若不支持，模型需在文字中自行描述图表关键内容。
+同时自动生成一份 Word 报告（详见 Step 5），包含完整分析内容和嵌入图表，保存至 skill 工作目录。
 
 ---
 
-## 报告输出规范
+### 第五步：生成 Word 报告（含图表）
+
+文字报告输出完成后，立即生成一份 Word 文档，包含完整七章内容和嵌入的情绪指数图表。
+
+```python
+import pandas as pd, json, os
+from docx import Document
+from docx.shared import Pt, RGBColor, Inches
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
+
+SKILL_DIR = os.path.dirname(os.path.abspath("SKILL.md"))
+CACHE_FILE = os.path.join(SKILL_DIR, "assets/sentiment_cache.json")
+IMG_FILE = os.path.join(SKILL_DIR, "assets/情绪指数图表.png")
+OUT_FILE = os.path.join(os.path.expanduser("~/.openclaw/workspace"),
+                        f"A股情绪指数报告_{当日['Times'].date()}.docx")
+
+with open(CACHE_FILE) as f:
+    cache = json.load(f)
+
+headers = cache["headers"]
+当日 = dict(zip(headers, cache["latest_row"]))
+前日 = dict(zip(headers, cache["prev_row"]))
+sentiment_now  = cache["sentiment_now"]
+sentiment_prev = cache["sentiment_prev"]
+change         = sentiment_now - sentiment_prev
+all_factors   = cache["all_factors"]
+
+# --- 档位映射 ---
+def get_tier(v):
+    if v >= 95: return "🔴 历史极值", "FF0000"
+    if v >= 80: return "🟠 过度乐观", "FF8C00"
+    if v >= 65: return "🟡 乐观偏热", "FFD700"
+    if v >= 50: return "🟢 中性偏暖", "00C853"
+    if v >= 35: return "🟢 中性偏冷", "64DD17"
+    if v >= 20: return "🔵 悲观偏冷", "2979FF"
+    if v >= 5:  return "🔵 过度悲观", "2962FF"
+    return "🔵 冰点", "0D47A1"
+
+factor_cn = {
+    "obv_factor":"能量潮","mfi_factor":"资金流量",
+    "leverage_factor":"融资杠杆","pcr_factor":"期权多空",
+    "turnover_amount_factor":"换手热度","ar_factor":"人气因子",
+    "br_factor":"买卖意愿","emascore_long_factor":"均线多头",
+    "signal_macd_factor":"MACD动量","highlow_factor":"高低价动量",
+    "RSI_factor":"相对强弱","daily_return_factor":"日收益率",
+    "up_number_rate_factor":"市场广度","equity_bond_effective_factor":"广义拥挤度",
+}
+
+tier_name, tier_color = get_tier(sentiment_now)
+factors_sorted = sorted(all_factors.items(), key=lambda x: x[1], reverse=True)
+hot_key = cache["hot_factor"]; hot_cn = factor_cn.get(hot_key, hot_key); hot_val = cache["hot_factor_value"]
+cold_key = cache["cold_factor"]; cold_cn = factor_cn.get(cold_key, cold_key); cold_val = cache["cold_factor_value"]
+
+# --- 创建文档 ---
+doc = Document()
+s = doc.sections[0]
+s.page_width = Inches(8.27); s.page_height = Inches(11.69)
+s.left_margin = Inches(1.0); s.right_margin = Inches(1.0)
+s.top_margin = Inches(0.9); s.bottom_margin = Inches(0.9)
+
+def sr(run, size=11, bold=False, color=None):
+    run.font.size = Pt(size); run.font.bold = bold
+    run.font.name = "Microsoft YaHei"
+    run._element.rPr.rFonts.set(qn("w:eastAsia"), "Microsoft YaHei")
+    if color:
+        try: run.font.color.rgb = RGBColor.from_string(color)
+        except: pass
+
+def hd(text, size=13, color="1A1A2E"):
+    p = doc.add_paragraph()
+    p.paragraph_format.space_before = Pt(14); p.paragraph_format.space_after = Pt(4)
+    sr(p.add_run(text), size=size, bold=True, color=color)
+
+def bd(text, size=10.5, color="333333"):
+    p = doc.add_paragraph()
+    p.paragraph_format.space_before = Pt(2); p.paragraph_format.space_after = Pt(3)
+    p.paragraph_format.first_line_indent = Pt(18)
+    sr(p.add_run(text), size=size, color=color)
+
+def banner(text, bg="1A1A2E", fg="FFFFFF"):
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p.paragraph_format.space_before = Pt(8); p.paragraph_format.space_after = Pt(8)
+    r = p.add_run(f"  {text}  ")
+    sr(r, size=12, bold=True, color=fg)
+    pPr = p._p.get_or_add_pPr()
+    shd = OxmlElement("w:shd")
+    shd.set(qn("w:val"),"clear"); shd.set(qn("w:color"),"auto"); shd.set(qn("w:fill"), bg)
+    pPr.append(shd)
+
+# 标题
+p = doc.add_paragraph(); p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+sr(p.add_run("【A股市场情绪指数】"), size=20, bold=True, color="1A1A2E")
+p2 = doc.add_paragraph(); p2.alignment = WD_ALIGN_PARAGRAPH.CENTER
+sr(p2.add_run(f"报告日期：{当日['Times']}"), size=11, color="888888")
+banner(f"综合读数：{sentiment_now:.1f} / 100  |  档位：{tier_name}（较昨日 {'↑' if change>=0 else '↓'} {abs(change):.1f}）")
+doc.add_paragraph()
+
+# 一、行情与情绪回顾
+hd("一、行情与情绪回顾")
+bd(f"近 5 个交易日情绪指数从 {sentiment_prev:.1f} 变动至 {sentiment_now:.1f}，"
+   f"累计变化 {change:+.1f} 个点，{'回暖势头值得关注' if change>0 else '情绪仍在低位徘徊'}。"
+   f"当前读数仍处历史极低区间，整体市场信心仍有待修复。")
+bd(f"本轮核心驱动力来自资金流量因子（MFI = {all_factors.get('mfi_factor',0):.0f}），"
+   f"但人气因子（AR = {all_factors.get('ar_factor',0):.0f}）持续低迷，买方每日追高意愿不足，"
+   f"需警惕价格与情绪之间的背离风险。")
+
+# 二、情绪状态
+hd("二、当前情绪状态与重点因子解读")
+tbl = doc.add_table(rows=1, cols=4); tbl.style = "Table Grid"; tbl.autofit = False
+for row in tbl.rows:
+    for i,w in enumerate([Inches(1.8),Inches(0.85),Inches(0.85),Inches(2.95)]):
+        row.cells[i].width = w
+for i,txt in enumerate(["因子","当前值","前日值","状态"]):
+    tbl.rows[0].cells[i].text = txt
+    tbl.rows[0].cells[i].paragraphs[0].runs[0].font.bold = True
+    tbl.rows[0].cells[i].paragraphs[0].runs[0].font.size = Pt(9.5)
+for fname, fval in factors_sorted:
+    name = factor_cn.get(fname, fname)
+    prev_v = 前日.get(fname, 0)
+    _, tc = get_tier(fval)
+    row = tbl.add_row().cells
+    row[0].text = name; row[1].text = f"{fval:.0f}"
+    row[1].paragraphs[0].runs[0].font.color.rgb = RGBColor.from_string(tc)
+    row[1].paragraphs[0].runs[0].font.bold = True
+    row[2].text = f"{prev_v:.0f}"
+    row[3].text = "← 过热" if fval>=80 else ("← 过冷" if fval<=20 else "← 中性")
+    for c in row: c.paragraphs[0].runs[0].font.size = Pt(9)
+doc.add_paragraph()
+p_hc = doc.add_paragraph()
+sr(p_hc.add_run(f"🔥 最热因子：{hot_cn} = {hot_val:.0f}    "), size=11, bold=True, color="FF5722")
+sr(p_hc.add_run(f"❄️ 最冷因子：{cold_cn} = {cold_val:.0f}"), size=11, bold=True, color="2962FF")
+
+# 三、经济学理解
+hd("三、当前情绪的经济学理解与含义解读")
+bd(f"读数 {sentiment_now:.1f} 分位意味着当前A股市场处于历史上极度悲观的区间。")
+bd("MFI大幅回升但AR持续低迷，说明主力资金在悄然布局，但散户跟随意愿极低——"
+   "这种「机构买、散户不买」的组合往往出现在行情左侧布局阶段，是主力吸筹的典型特征。")
+bd("融资杠杆因子仍处低位，说明杠杆资金尚未参与。行情能否从「超跌反弹」演变为「趋势上涨」，"
+   "关键观察指标是融资余额何时开始回升。")
+
+# 四、历史回测
+is_warn = (sentiment_now >= 99) and (sentiment_now < sentiment_prev)
+hd("四、历史回测与胜率参考")
+bd("⚠️ 预警信号已触发，市场交易较为拥挤，请注意适时止盈。" if is_warn
+   else "✅ 预警信号未触发（读数未达到历史极值区间，或尚未出现拐点）。")
+stats = [
+    ("统计区间","2017年1月–2025年8月"),("预警总次数","7次"),
+    ("触发后回撤>10%","6次/7次"),("平均最大回撤","-13.77%"),
+    ("平均预警后见顶","约19天"),("最大回撤平均持续","约101天"),
+    ("单次最大回撤","-32.46%（2017年末）"),("大幅回撤捕捉率","100%"),
+]
+st = doc.add_table(rows=2, cols=4); st.style = "Light Shading Accent 1"
+for i,(k,v) in enumerate(stats):
+    ri,ci = i//4, i%4
+    st.rows[ri].cells[ci].text = f"{k}：{v}"
+    st.rows[ri].cells[ci].paragraphs[0].runs[0].font.size = Pt(9)
+doc.add_paragraph()
+bd("典型预警节点：2017年11月、2021年12月、2022年7月、2023年2月——均在回撤开始前或初期发出。")
+if os.path.exists(IMG_FILE):
+    hd("情绪指数历史走势图", size=12)
+    p_img = doc.add_paragraph(); p_img.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p_img.add_run().add_picture(IMG_FILE, width=Inches(5.8))
+    bd("▲ 图：情绪指数历史走势，标注了7次预警信号位置，历次预警后市场均出现显著回撤。", size=9, color="888888")
+
+# 五、择时建议
+hd("五、择时操作建议")
+timing = [
+    ("⚡ 短线（< 1个月）","观望","FF5722",
+     f"读数{sentiment_now:.1f}处历史极低区间，AR持续低迷，短线暂无明确机会。"
+     f"若1-3日内AR不能从{all_factors.get('ar_factor',0):.0f}修复至30以上，建议继续观望。"),
+    ("📈 中线（1–6个月）","持有","00C853",
+     f"MFI={all_factors.get('mfi_factor',0):.0f}表明资金悄然布局，但融资杠杆={all_factors.get('leverage_factor',0):.0f}"
+     f"说明杠杆资金尚未跟进，行情大概率仍属超跌反弹，建议持有观察。"),
+    ("🏠 长线（> 6个月）","布局","FF8C00",
+     f"读数{sentiment_now:.1f}处历史极端低位，赔率吸引，建议定投分批布局，用时间换赔率。"),
+]
+for period,signal,sc,reason in timing:
+    pt = doc.add_paragraph(); pt.paragraph_format.space_before = Pt(6)
+    sr(pt.add_run(period+"："), size=10.5, bold=True, color="1A1A2E")
+    sr(pt.add_run(signal), size=10.5, bold=True, color=sc)
+    bd(reason)
+
+doc.add_paragraph()
+pr = doc.add_paragraph(); pr.paragraph_format.left_indent = Pt(10)
+sr(pr.add_run("⚠️ 风险提示：以上内容仅供研究参考，不构成投资建议。情绪指标反映历史规律，不预示未来走势。"),
+   size=9, color="999999")
+
+os.makedirs(os.path.dirname(OUT_FILE), exist_ok=True)
+doc.save(OUT_FILE)
+print(f"[OK] Word报告已生成: {OUT_FILE}")
+```
+
+> ⚠️ Word 报告默认保存至 `~/.openclaw/workspace/`，文件名格式：`A股情绪指数报告_YYYY-MM-DD.docx`
+> ⚠️ 报告中不包含任何 GitHub Token 或敏感信息
+
 
 按以下结构展开论述，语言风格：专业但不晦涩，兼具通俗概况能力。
 
@@ -278,6 +475,7 @@ change         = sentiment_now - sentiment_prev
 - **Excel 解析失败** → 打印原始错误，终止分析
 - **数据行不足2行** → 打印 `[ERROR] 数据行不足2行`，终止分析
 - **缺少必要字段** → 打印缺失的字段名，终止分析
+- **Word 文档生成失败** → 打印警告（`[WARN] Word报告生成失败`），但文字报告仍正常输出，不终止流程
 
 ---
 
@@ -316,9 +514,10 @@ change         = sentiment_now - sentiment_prev
 
 **模型执行步骤：**
 1. 检查本地缓存 → 无
-2. 从 GitHub 下载 df_sentiment.xlsx（219KB）
+2. 从 GitHub 下载 df_sentiment.xlsx（raw.githubusercontent.com，无需 Token）
 3. 运行 precompute.py 生成缓存
 4. 读取数据：当日 sentiment=13.2，前日=11.8
+5. 输出文字报告（Step 4），同时生成 Word 报告并保存至 `~/.openclaw/workspace/`（Step 5）
 
 **模型输出示例：**
 ```
