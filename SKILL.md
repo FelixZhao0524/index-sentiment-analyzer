@@ -108,6 +108,8 @@ import pandas as pd
 
 df = pd.read_excel("assets/df_sentiment.xlsx", engine="openpyxl")
 df = df[df["Times"].notna()]
+df["Times"] = pd.to_datetime(df["Times"], errors="coerce")  # 统一转datetime
+df = df.dropna(subset=["Times"])
 df = df.sort_values("Times").reset_index(drop=True)
 
 当日 = df.iloc[-1]
