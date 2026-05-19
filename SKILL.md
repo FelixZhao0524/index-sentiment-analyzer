@@ -109,6 +109,8 @@ change         = sentiment_now - sentiment_prev
 
 直接输出文字报告，**不生成任何文件**。
 
+**重要：每次输出第四章时，需同时发送 `assets/情绪指数图表.png` 作为图片附件（使用 feishu_im_user_message 工具，action=send，msg_type=image，receive_id 为当前对话用户的 open_id 或群 chat_id）。图片发送后在同一条消息或下一条消息中输出图表解读文字。**
+
 ---
 
 ## 报告输出规范
